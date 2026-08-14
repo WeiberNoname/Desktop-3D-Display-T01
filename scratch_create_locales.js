@@ -41,6 +41,13 @@ const newTranslations = {
     "refresh_logs": "Refresh Logs",
     "clear_logs": "Clear Logs",
     "reset_steam_stats": "Reset Steam Stats 🧹",
+    "physics_section": "⚡ Physics & Collision Dynamics",
+    "enable_physics": "Enable Physics Engine (Gravity & Throwing)",
+    "physics_floor": "Enable Ground Landing Collider",
+    "physics_gravity": "Gravity",
+    "physics_elasticity": "Bounciness",
+    "physics_hint_title": "Physics Throw Shortcut",
+    "physics_hint_body": "Hold D + Left Drag on mascot to throw with momentum!",
     "btn_save": "Save & Refresh",
     "btn_close": "Close",
     "open_settings": "Open Settings"

@@ -151,6 +151,51 @@
         </div>
       </div>
     </div>
+
+    <div class="settings-section">
+      <h4 data-i18n="physics_section">⚡ Physics & Collision Dynamics</h4>
+      <div class="setting-item checkbox">
+        <input type="checkbox" id="enable-physics">
+        <label for="enable-physics" data-i18n="enable_physics">Enable Physics Engine (Gravity & Throwing)</label>
+      </div>
+      <div class="physics-test-note" style="font-size: 11px; background: rgba(255,215,0,0.15); border: 1px solid rgba(255,215,0,0.4); color: #ffe600; padding: 6px 10px; border-radius: 6px; margin: 6px 0 10px 0;">
+        💡 <strong data-i18n="physics_hint_title">Physics Throw Shortcut</strong>: <span data-i18n="physics_hint_body">Hold <strong>D + Left Drag</strong> on mascot to throw with momentum!</span>
+      </div>
+      <div class="setting-item checkbox">
+        <input type="checkbox" id="physics-floor" checked>
+        <label for="physics-floor" data-i18n="physics_floor">Enable Ground Landing Collider</label>
+      </div>
+      <div class="spin-controls-grid">
+        <div class="spin-row">
+          <label for="physics-gravity" style="min-width: 100px;" data-i18n="physics_gravity">Gravity</label>
+          <input type="range" id="physics-gravity" min="0.0" max="25.0" step="0.5" value="9.8">
+          <span class="spin-val" id="val-physics-gravity">9.8</span>
+        </div>
+        <div class="spin-row">
+          <label for="physics-elasticity" style="min-width: 100px;" data-i18n="physics_elasticity">Bounce Bounciness</label>
+          <input type="range" id="physics-elasticity" min="0.0" max="1.0" step="0.05" value="0.70">
+          <span class="spin-val" id="val-physics-elasticity">0.70</span>
+        </div>
+      </div>
+    <div class="settings-section">
+      <h4 data-i18n="fps_mode_section">🎥 First-Person Perspective & Spatial Coordinates (Plan 001)</h4>
+      <div class="setting-item checkbox">
+        <input type="checkbox" id="enable-fps-mode">
+        <label for="enable-fps-mode"><span data-i18n="enable_fps_mode">Enable First-Person Camera Mode</span> <span style="font-size: 10px; opacity: 0.7;" data-i18n="fps_sub">(Toggle with Ctrl + Shift + F)</span></label>
+      </div>
+      <div class="setting-item checkbox">
+        <input type="checkbox" id="show-xyz-coords">
+        <label for="show-xyz-coords"><span data-i18n="show_xyz_coords">Enable XYZ Coordinates Display</span> <span style="font-size: 10px; opacity: 0.7;" data-i18n="show_xyz_sub">(Toggle with Ctrl + Shift + C)</span></label>
+      </div>
+      <div class="setting-item checkbox">
+        <input type="checkbox" id="show-ground-grid">
+        <label for="show-ground-grid" data-i18n="show_ground_grid">Show 3D Ground Spatial Grid</label>
+      </div>
+      <div class="fps-hint-note" style="font-size: 11px; background: rgba(56,189,248,0.15); border: 1px solid rgba(56,189,248,0.4); color: #38bdf8; padding: 6px 10px; border-radius: 6px; margin-top: 6px;">
+        💡 <strong data-i18n="fps_hint_title">FPS Controls</strong>: <span data-i18n="fps_hint_body">Move mouse to aim view (Cursor hidden + Crosshair active). WASD to move, Space (Up), Shift (Down). Press ESC to exit!</span>
+      </div>
+      <button id="reset-camera-btn" class="btn" style="margin-top: 8px; width: 100%; background: rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.4); color: #38bdf8; padding: 6px; border-radius: 6px; font-size: 11px; cursor: pointer;" data-i18n="reset_camera">Reset Camera & Position 🔄</button>
+    </div>
     
     <div class="settings-section help-section">
       <h4 data-i18n="viewport_controls">🖱️ Viewport Controls (Blender Style)</h4>
@@ -195,7 +240,28 @@
       <button id="save-btn" class="btn save" data-i18n="btn_save">Save & Refresh</button>
       <button id="close-btn" class="btn close" data-i18n="btn_close">Close</button>
     </div>
+  <!-- Live XYZ Spatial Coordinates HUD Overlay -->
+  <div id="xyz-hud-overlay" class="xyz-hud hidden" style="pointer-events: none;">
+    <div class="xyz-hud-header">
+      <span class="xyz-hud-title" data-i18n="xyz_hud_title">📐 XYZ Coordinates (Plan 001)</span>
+      <span class="xyz-hud-shortcut">Ctrl+Shift+C</span>
+    </div>
+    <div class="xyz-hud-body">
+      <div class="xyz-hud-row">
+        <span class="xyz-badge axis-x">X: <strong id="xyz-val-x">0.00</strong></span>
+        <span class="xyz-badge axis-y">Y: <strong id="xyz-val-y">0.00</strong></span>
+        <span class="xyz-badge axis-z">Z: <strong id="xyz-val-z">0.00</strong></span>
+      </div>
+      <div class="xyz-hud-row rot-row">
+        <span class="rot-label">Rot:</span>
+        <span class="rot-val">RX: <strong id="xyz-val-rx">0°</strong></span>
+        <span class="rot-val">RY: <strong id="xyz-val-ry">0°</strong></span>
+        <span class="rot-val">RZ: <strong id="xyz-val-rz">0°</strong></span>
+    </div>
   </div>
+
+  <!-- FPS Mode Center Crosshair Target Overlay -->
+  <div id="fps-crosshair" class="fps-crosshair hidden" style="pointer-events: none;">+</div>
 
   <script type="module" src="renderer.js"></script>
 </body>

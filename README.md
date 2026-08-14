@@ -18,7 +18,7 @@ The mascot floats on top of your working windows, bobbing gently. It captures cl
 Perfect for instant use without running terminal commands.
 
 1. Open **File Explorer** and navigate to:
-   [DesktopPet-win32-x64](file:///C:/Users/space/.gemini/antigravity-ide/scratch/desktop%20pet%20V7.1/DesktopPet-win32-x64)
+   [DesktopPet-win32-x64](file:///C:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T01%20V1/DesktopPet-win32-x64)
 2. Double-click **`DesktopPet.exe`** to start your pet mascot.
 
 > [!TIP]
@@ -32,7 +32,7 @@ Ideal if you download the source code from GitHub to inspect, debug, or extend t
 1. Ensure [Node.js](https://nodejs.org) is installed.
 2. Open terminal and navigate to the project directory:
    ```bash
-   cd "C:\Users\space\.gemini\antigravity-ide\scratch\desktop pet V7.1"
+   cd "C:\Users\space\.gemini\antigravity-ide\scratch\Desktop-3D-Display-T01 V1"
    ```
 3. Install dependencies:
    ```bash
@@ -88,12 +88,31 @@ Desktop Pet V7.1 includes an enterprise-grade internationalization system built 
 | **Hover ➔ Click ✖** | Beside ⚙️ Button | **Close Application:** Safely exits and quits the application window instantly. |
 | **Left Click** | On character | Procedural mascot: plays jump and spin. Custom models: plays animation loop at accelerated speed. |
 | **Left Click + Drag** | On character / Quick Buttons / Panel | Smoothly repositions the mascot window anywhere on your monitor(s). |
+| **Ctrl + Shift + F** | Globally | Toggles **First-Person Camera Perspective Mode** (WASD + Mouse 360° look). |
+| **Mouse Movement (in FPS Mode)** | Viewport | **360° Pointer Lock Mouse Look:** Transparent cursor locked at center to aim view smoothly in all directions. |
+| **W / A / S / D** | In FPS Mode | **FPS Movement:** Move camera forward (`W`), backward (`S`), strafe left (`A`), strafe right (`D`). |
+| **Space / Shift** | In FPS Mode | **Vertical Flight:** Fly UP (`Space`) or DOWN (`Shift`) along Y axis in 3D space. |
+| **ESC Key** | In FPS Mode | **Exit FPS Mode:** Releases pointer lock, restores OS cursor, and exits FPS mode. |
+| **Ctrl + Shift + C** | Globally | Toggles live **Spatial XYZ Coordinates HUD** display overlay. |
 | **Alt + Left-Drag** (or MMB-Drag) | Anywhere | **Orbit View (3D Rotate):** Changes the 3D view perspective, rotating the pet. |
 | **Shift + Left-Drag** | Anywhere | **Pan View (3D Translate):** Moves the pet model up/down and left/right inside the canvas boundaries. |
 | **Scroll Wheel** (or Ctrl + Left-Drag) | Anywhere | **Zoom View (3D Scale/Depth):** Moves the pet model closer or further away. |
 | **Alt + Double-Click** | On mascot | **Reset View:** Instantly centers and resets the model's 3D orientation back to default. |
 | **Click** | Outside character | Passed through to the folders, IDE, or browser behind the window. |
 | **Ctrl + V** | Globally | Toggles **View Only Mode** on/off (only active when not typing inside input fields). |
+
+---
+
+## 🎥 First-Person Perspective (FPS) & Spatial XYZ Coordinates (Plan 001)
+
+Desktop Pet includes an advanced **First-Person Perspective Camera Engine** and spatial tracking system:
+
+* **Pointer Lock 360° Mouse Look**: Entering FPS mode (`Ctrl + Shift + F` or via Settings) locks the pointer to the canvas center, hides the mouse cursor (`cursor: none`), and activates a centered **`+` crosshair target overlay**. Mouse movements provide infinite, smooth 360-degree look rotation without reaching display edges.
+* **3D Flight Controls**: Navigate the 3D environment seamlessly using `WASD` for planar movement and `Space` / `Shift` for vertical elevation flight.
+* **Instant Exit via `ESC`**: Press `ESC` at any time to release pointer lock and return to default mascot mode.
+* **Spatial XYZ Coordinates HUD**: Live glassmorphism badge overlay displaying real-time **Camera/Mascot Position `(X, Y, Z)`** and **Rotation `(RX, RY, RZ)`**.
+* **3D Ground Spatial Grid**: Enable/disable ground reference spatial grid for spatial depth perspective.
+* **Reset Camera & Position Button**: One-click reset button in Settings Panel (`Reset Camera & Position 🔄`) to instantly restore camera `(0, 0, 5.5)` and mascot origin.
 
 ---
 
@@ -107,8 +126,8 @@ The app automatically detects, centers, and displays any 3D asset:
 
 Alternatively, you can manually manage models:
 1. Locate the **`assets/`** folder:
-   - Development path: [assets/](file:///C:/Users/space/.gemini/antigravity-ide/scratch/desktop%20pet%20V7.1/assets)
-   - Executable path: [DesktopPet-win32-x64/assets/](file:///C:/Users/space/.gemini/antigravity-ide/scratch/desktop%20pet%20V7.1/DesktopPet-win32-x64/resources/app/assets)
+   - Development path: [assets/](file:///C:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T01%20V1/assets)
+   - Executable path: [DesktopPet-win32-x64/assets/](file:///C:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T01%20V1/DesktopPet-win32-x64/resources/app/assets)
 2. Drop any **`.glb`** or **`.gltf`** model file into this directory.
 3. Reload or select it inside the Settings Panel.
 4. **Fallback:** If you empty the `assets/` folder, the application immediately falls back to rendering the default pink bunny mascot.
@@ -121,17 +140,21 @@ Alternatively, you can manually manage models:
 2. **Accessing the Panel:** Hover your mouse cursor over the mascot. Quick buttons `⚙️` (Settings) and `✖` (Close App) will appear. Click `⚙️` to toggle the Settings Panel open or closed.
 3. **Editable Settings:**
    - **Language**: Select your preferred interface language from **31 international options**.
-   - **Active Mascot**: Select between the default procedural bunny and custom models dropped in the `assets/` folder.
-   - **Active Animation**: Lists and plays the model's embedded animation clips, plus a **None (Static Pose)** option.
+   - **Enable First-Person Camera Mode**: Toggle WASD 3D flight & 360-degree pointer lock camera aiming (`Ctrl + Shift + F`).
+   - **Enable XYZ Coordinates Display**: Show live spatial position & rotation readout HUD badge (`Ctrl + Shift + C`).
+   - **Show 3D Ground Spatial Grid**: Toggle ground level reference spatial grid.
+   - **Reset Camera & Position Button**: One-click reset to default camera `(0, 0, 5.5)` and mascot origin.
+   - **Active Mascot**: Select between default procedural bunny and custom models dropped in the `assets/` folder.
+   - **Active Animation**: Lists and plays embedded animation clips, plus a **None (Static Pose)** option.
    - **Window Width & Height:** Adjust window dimensions from **30px** up to full monitor resolution.
-   - **Model Scale:** Zoom/scale the 3D character from **0.10x** to **5.00x** with **0.01** step precision.
+   - **Model Scale:** Zoom/scale 3D character from **0.10x** to **5.00x** with **0.01** step precision.
    - **Panel Text Size:** Scalable slider from **0.80x** to **2.00x** to dynamically resize settings panel typography.
    - **Enable Idle Bobbing:** Toggle the slow floating vertical idle animation.
-   - **View Only Mode**: Enable transparency on hover (`Ctrl + V`). The pet fades to fully transparent when your mouse enters the area.
+   - **View Only Mode**: Enable transparency on hover (`Ctrl + V`). The pet fades to fully transparent when mouse enters area.
    - **Lock Mascot Position**: Freeze window coordinates to prevent accidental dragging.
    - **Force High-Performance GPU:** Request discrete high-speed graphics card. *(Requires restart)*.
-   - **Seamless Performance Mode:** Toggle between Seamless Mode (throttled proxy raycasting) and Precise Mode.
-   - **Place Settings Icon on Left**: Shift quick buttons `⚙️` and `✖` position to the top-left margin.
+   - **Seamless Performance Mode**: Toggle between Seamless Mode (throttled proxy raycasting) and Precise Mode.
+   - **Place Settings Icon on Left**: Shift quick buttons `⚙️` and `✖` position to top-left margin.
    - **Axis Spinning (X, Y, and Z):** Enable continuous rotation spinning on X, Y, and Z axes with independent speed sliders.
 
 ---
