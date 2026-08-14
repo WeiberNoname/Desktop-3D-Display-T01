@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from './node_modules/three/examples/jsm/loaders/GLTFLoader.js';
 import { initI18n, t, changeLanguage, getCurrentLanguage } from './i18nManager.js';
+import { physicsEngine } from './physicsEngine.js';
 
 const { ipcRenderer } = window.require('electron');
 const fs = window.require('fs');
@@ -8,12 +9,24 @@ const path = window.require('path');
 const { pathToFileURL } = window.require('url');
 
 let scene, camera, renderer, characterGroup, innerModelGroup, collisionProxy;
+let axesHelper = null;
+let gridHelper = null;
 let mixer;
 let idleAction = null;
 let reactAction = null;
 let loadedAnimations = [];
 let availableAnimations = [];
 let customModelLoaded = false;
+
+// FPS Camera Perspective State Variables (Plan 001)
+let cameraPitch = 0;
+let cameraYaw = 0;
+let fpsKeyW = false;
+let fpsKeyA = false;
+let fpsKeyS = false;
+let fpsKeyD = false;
+let fpsKeySpace = false;
+let fpsKeyShift = false;
 
 // Settings Panel configurations
 let currentSettings = {
@@ -32,6 +45,13 @@ let currentSettings = {
   settingsLeft: false,
   lockPosition: false,
   viewOnly: false,
+  enablePhysics: false,
+  physicsGravity: 9.8,
+  physicsElasticity: 0.7,
+  physicsFloor: true,
+  showXYZCoords: false,
+  showGroundGrid: false,
+  enableFPSMode: false,
   activeModel: 'procedural',
   activeAnimation: 'default',
   clickCount: 0,
@@ -89,6 +109,8 @@ let navStartTranslationZ = 0;
 let altKeyHeld = false;
 let shiftKeyHeld = false;
 let ctrlKeyHeld = false;
+let keyDHeld = false;
+let isPhysicsDragging = false;
 
 // Animation state
 let animationState = {
@@ -108,6 +130,14 @@ async function init() {
   
   // Load settings configuration file if it exists in assets/
   hasSettingsFile = readSettingsFile();
+
+  // Configure Physics Engine
+  physicsEngine.configure({
+    enabled: currentSettings.enablePhysics,
+    gravity: currentSettings.physicsGravity,
+    restitution: currentSettings.physicsElasticity,
+    enableFloor: currentSettings.physicsFloor
+  });
 
   // Initialize i18next multi-language framework
   await initI18n(currentSettings.language);
@@ -151,6 +181,16 @@ async function init() {
   const rimLight = new THREE.DirectionalLight(0xffffff, 0.5);
   rimLight.position.set(0, 5, -5);
   scene.add(rimLight);
+
+  // 4.5. Add 3D Axes Helper and Ground Spatial Grid (Plan 001)
+  axesHelper = new THREE.AxesHelper(1.5);
+  scene.add(axesHelper);
+
+  gridHelper = new THREE.GridHelper(10, 10, 0x555555, 0x222222);
+  gridHelper.position.y = -1.2;
+  scene.add(gridHelper);
+
+  updateXYZVisibility();
 
   // 5. Auto-detect custom asset in assets/ or load procedural mascot
   detectAndLoadAsset();
@@ -400,6 +440,7 @@ function setupInteraction() {
                         isMouseOverUI || 
                         isDragging || 
                         isNavigating || 
+                        currentSettings.enableFPSMode ||
                         altKeyHeld || 
                         shiftKeyHeld || 
                         ctrlKeyHeld;
@@ -413,6 +454,19 @@ function setupInteraction() {
     altKeyHeld = event.altKey;
     shiftKeyHeld = event.shiftKey;
     ctrlKeyHeld = event.ctrlKey;
+
+    // Handle First-Person Camera Mouse Look orientation (Plan 001) - Drag-free mouse look
+    if (currentSettings.enableFPSMode && !isSettingsOpen) {
+      const sensitivity = 0.003;
+      cameraYaw -= event.movementX * sensitivity;
+      cameraPitch -= event.movementY * sensitivity;
+      
+      const maxPitch = Math.PI / 2 - 0.02;
+      cameraPitch = Math.max(-maxPitch, Math.min(maxPitch, cameraPitch));
+      
+      camera.rotation.set(cameraPitch, cameraYaw, 0, 'YXZ');
+      return;
+    }
 
     // Handle model-centric navigation drag updates
     if (isNavigating) {
@@ -434,6 +488,23 @@ function setupInteraction() {
       return;
     }
 
+    if (isPhysicsDragging) {
+      const deltaX = event.screenX - dragStartScreenX;
+      const deltaY = event.screenY - dragStartScreenY;
+
+      dragStartScreenX = event.screenX;
+      dragStartScreenY = event.screenY;
+
+      physicsEngine.onDragMove(event.screenX, event.screenY);
+
+      physicsEngine.position.x += deltaX * 0.008;
+      physicsEngine.position.y -= deltaY * 0.008;
+      if (characterGroup) {
+        characterGroup.position.set(physicsEngine.position.x, physicsEngine.position.y, physicsEngine.position.z);
+      }
+      return;
+    }
+
     // If user is dragging the window, we don't recalculate raycast or send ignore-mouse toggles
     if (isDragging) {
       const deltaX = event.screenX - dragStartScreenX;
@@ -443,6 +514,7 @@ function setupInteraction() {
       dragStartScreenX = event.screenX;
       dragStartScreenY = event.screenY;
 
+      physicsEngine.onDragMove(event.screenX, event.screenY);
       ipcRenderer.send('move-window', { x: deltaX, y: deltaY });
       return;
     }
@@ -499,6 +571,16 @@ function setupInteraction() {
   window.addEventListener('mousedown', (event) => {
     if (isSettingsOpen) return;
 
+    if (currentSettings.enableFPSMode && renderer && renderer.domElement) {
+      if (document.pointerLockElement !== renderer.domElement) {
+        try {
+          renderer.domElement.requestPointerLock();
+        } catch (e) {
+          console.warn("Could not lock pointer:", e);
+        }
+      }
+    }
+
     altKeyHeld = event.altKey;
     shiftKeyHeld = event.shiftKey;
     ctrlKeyHeld = event.ctrlKey;
@@ -536,6 +618,30 @@ function setupInteraction() {
 
     if (currentSettings.lockPosition) return;
     if (event.button === 0) { // Left click
+      // Check for D + Drag Physics Throw Shortcut
+      const isDDrag = keyDHeld || event.key === 'd' || event.key === 'D' || event.code === 'KeyD';
+      if (isDDrag) {
+        event.preventDefault();
+        isPhysicsDragging = true;
+        isDragging = false; // Do NOT drag Electron window!
+        
+        if (!physicsEngine.enabled) {
+          physicsEngine.configure({ enabled: true });
+          currentSettings.enablePhysics = true;
+          const enableCheck = document.getElementById('enable-physics');
+          if (enableCheck) enableCheck.checked = true;
+        }
+
+        dragStartScreenX = event.screenX;
+        dragStartScreenY = event.screenY;
+
+        physicsEngine.onDragStart(event.screenX, event.screenY);
+        document.body.style.cursor = 'grabbing';
+        showSpeechBubble("Physics Throw Active! 🚀 (Release to launch)", 1800);
+        updateIgnoreMouseState();
+        return;
+      }
+
       const gearBtn = document.getElementById('settings-btn');
       const closeBtn = document.getElementById('app-close-btn');
       const settingsPanel = document.getElementById('settings-panel');
@@ -561,6 +667,7 @@ function setupInteraction() {
         dragStartedOnMascot = isMouseOverCharacter;
         isDraggingGear = isClickOnGear;
         
+        physicsEngine.onDragStart(event.screenX, event.screenY);
         updateIgnoreMouseState();
       }
     }
@@ -583,8 +690,17 @@ function setupInteraction() {
       return;
     }
 
+    if (isPhysicsDragging) {
+      isPhysicsDragging = false;
+      physicsEngine.onDragEnd(event.screenX, event.screenY);
+      document.body.style.cursor = isMouseOverCharacter ? 'pointer' : 'default';
+      updateIgnoreMouseState();
+      return;
+    }
+
     if (isDragging) {
       isDragging = false;
+      physicsEngine.onDragEnd(event.screenX, event.screenY);
       document.body.style.cursor = isMouseOverCharacter ? 'pointer' : 'default';
       updateIgnoreMouseState();
 
@@ -620,7 +736,57 @@ function setupInteraction() {
     if (event.key === 'Alt') altKeyHeld = true;
     if (event.key === 'Shift') shiftKeyHeld = true;
     if (event.key === 'Control') ctrlKeyHeld = true;
+    if (event.key === 'd' || event.key === 'D' || event.code === 'KeyD') keyDHeld = true;
+    
+    // FPS Movement Key Tracking & Exit on ESC (Plan 001)
+    const activeEl = document.activeElement;
+    const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable);
+
+    if (!isTyping && currentSettings.enableFPSMode) {
+      if (event.key === 'Escape' || event.key === 'Esc') {
+        event.preventDefault();
+        currentSettings.enableFPSMode = false;
+        resetCameraAndPosition();
+        saveSettingsFile();
+        updateXYZVisibility();
+        updateIgnoreMouseState();
+
+        const fpsCheck = document.getElementById('enable-fps-mode');
+        if (fpsCheck) fpsCheck.checked = false;
+
+        showSpeechBubble("Exited FPS Camera Mode (ESC) 🐰", 2200);
+        return;
+      }
+      if (event.code === 'KeyW' || event.key === 'w' || event.key === 'W') fpsKeyW = true;
+      if (event.code === 'KeyS' || event.key === 's' || event.key === 'S') fpsKeyS = true;
+      if (event.code === 'KeyA' || event.key === 'a' || event.key === 'A') fpsKeyA = true;
+      if (event.code === 'KeyD' || event.key === 'd' || event.key === 'D') fpsKeyD = true;
+      if (event.code === 'Space' || event.key === ' ') fpsKeySpace = true;
+      if (event.key === 'Shift') fpsKeyShift = true;
+    }
+
     updateIgnoreMouseState();
+
+    // Toggle First-Person Camera Mode (Ctrl + Shift + F) (Plan 001)
+    if (event.ctrlKey && event.shiftKey && (event.key === 'F' || event.key === 'f')) {
+      event.preventDefault();
+      currentSettings.enableFPSMode = !currentSettings.enableFPSMode;
+      if (!currentSettings.enableFPSMode) {
+        // Reset camera to default perspective origin
+        camera.position.set(0, 0, 5.5);
+        camera.rotation.set(0, 0, 0);
+        cameraPitch = 0;
+        cameraYaw = 0;
+        fpsKeyW = fpsKeyA = fpsKeyS = fpsKeyD = fpsKeySpace = fpsKeyShift = false;
+      }
+      saveSettingsFile();
+      updateIgnoreMouseState();
+
+      const fpsCheck = document.getElementById('enable-fps-mode');
+      if (fpsCheck) fpsCheck.checked = currentSettings.enableFPSMode;
+
+      showSpeechBubble(currentSettings.enableFPSMode ? "FPS Camera Mode: Enabled 🎥 (WASD+Space/Shift)" : "FPS Camera Mode: Disabled 🐰", 2500);
+    }
 
     // Ctrl + V shortcut to toggle View Only Mode
     const isCtrlV = event.ctrlKey && (event.key === 'v' || event.key === 'V');
@@ -644,25 +810,42 @@ function setupInteraction() {
       }
     }
 
+    // Toggle Spatial XYZ Coordinates Display (Ctrl + Shift + C) (Plan 001)
+    if (event.ctrlKey && event.shiftKey && (event.key === 'C' || event.key === 'c')) {
+      event.preventDefault();
+      currentSettings.showXYZCoords = !currentSettings.showXYZCoords;
+      updateXYZVisibility();
+      saveSettingsFile();
+
+      const showCoordsCheck = document.getElementById('show-xyz-coords');
+      if (showCoordsCheck) showCoordsCheck.checked = currentSettings.showXYZCoords;
+
+      showSpeechBubble(currentSettings.showXYZCoords ? "XYZ Coordinates: Enabled 📐" : "XYZ Coordinates: Disabled 📐", 2200);
+    }
+
     // Blender emulated orthographic/perspective view hotkeys
     if (!isSettingsOpen && innerModelGroup) {
-      const key = event.key;
-      if (key === '1') {
-        innerModelGroup.rotation.set(0, 0, 0);
-        showSpeechBubble("Front View 🐰", 1200);
-      } else if (key === '3') {
-        innerModelGroup.rotation.set(0, Math.PI / 2, 0);
-        showSpeechBubble("Right View ➡️", 1200);
-      } else if (key === '7') {
-        innerModelGroup.rotation.set(Math.PI / 2, 0, 0);
-        showSpeechBubble("Top View ⬇️", 1200);
-      } else if (key === '9') {
-        innerModelGroup.rotation.y += Math.PI;
-        showSpeechBubble("Opposite View 🔄", 1200);
-      } else if (key === '.' || key.toLowerCase() === 'f') {
-        innerModelGroup.rotation.set(0, 0, 0);
-        innerModelGroup.position.set(0, 0, 0);
-        showSpeechBubble("Frame Selected / Reset view 🔄", 1500);
+      const activeEl = document.activeElement;
+      const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable);
+      if (!isTyping) {
+        const key = event.key;
+        if (key === '1') {
+          innerModelGroup.rotation.set(0, 0, 0);
+          showSpeechBubble("Front View 🐰", 1200);
+        } else if (key === '3') {
+          innerModelGroup.rotation.set(0, Math.PI / 2, 0);
+          showSpeechBubble("Right View ➡️", 1200);
+        } else if (key === '7') {
+          innerModelGroup.rotation.set(Math.PI / 2, 0, 0);
+          showSpeechBubble("Top View ⬇️", 1200);
+        } else if (key === '9') {
+          innerModelGroup.rotation.y += Math.PI;
+          showSpeechBubble("Opposite View 🔄", 1200);
+        } else if (key === '.' || key.toLowerCase() === 'f') {
+          innerModelGroup.rotation.set(0, 0, 0);
+          innerModelGroup.position.set(0, 0, 0);
+          showSpeechBubble("Frame Selected / Reset view 🔄", 1500);
+        }
       }
     }
   });
@@ -671,14 +854,39 @@ function setupInteraction() {
     if (event.key === 'Alt') altKeyHeld = false;
     if (event.key === 'Shift') shiftKeyHeld = false;
     if (event.key === 'Control') ctrlKeyHeld = false;
+    if (event.key === 'd' || event.key === 'D' || event.code === 'KeyD') keyDHeld = false;
+
+    // Reset FPS key states on release
+    if (event.code === 'KeyW' || event.key === 'w' || event.key === 'W') fpsKeyW = false;
+    if (event.code === 'KeyS' || event.key === 's' || event.key === 'S') fpsKeyS = false;
+    if (event.code === 'KeyA' || event.key === 'a' || event.key === 'A') fpsKeyA = false;
+    if (event.code === 'KeyD' || event.key === 'd' || event.key === 'D') fpsKeyD = false;
+    if (event.code === 'Space' || event.key === ' ') fpsKeySpace = false;
+    if (event.key === 'Shift') fpsKeyShift = false;
+
     updateIgnoreMouseState();
+  });
+
+  // Pointer Lock change tracking for 360-degree transparent mouse control
+  document.addEventListener('pointerlockchange', () => {
+    const isLocked = !!document.pointerLockElement;
+    if (!isLocked && currentSettings.enableFPSMode && !isSettingsOpen) {
+      currentSettings.enableFPSMode = false;
+      resetCameraAndPosition();
+      saveSettingsFile();
+      updateXYZVisibility();
+      updateIgnoreMouseState();
+      showSpeechBubble("Pointer Unlocked - Exited FPS Mode 🐰", 2000);
+    }
   });
 
   window.addEventListener('blur', () => {
     isNavigating = false;
+    isPhysicsDragging = false;
     altKeyHeld = false;
     shiftKeyHeld = false;
     ctrlKeyHeld = false;
+    keyDHeld = false;
     document.body.style.cursor = 'default';
     updateIgnoreMouseState();
   });
@@ -1193,6 +1401,13 @@ language=en`;
           if (key === 'settingsLeft') { currentSettings.settingsLeft = (val === 'true'); validKeysParsed++; }
           if (key === 'lockPosition') { currentSettings.lockPosition = (val === 'true'); validKeysParsed++; }
           if (key === 'viewOnly') { currentSettings.viewOnly = (val === 'true'); validKeysParsed++; }
+          if (key === 'enablePhysics') { currentSettings.enablePhysics = (val === 'true'); validKeysParsed++; }
+          if (key === 'physicsGravity') { currentSettings.physicsGravity = parseFloat(val) || 9.8; validKeysParsed++; }
+          if (key === 'physicsElasticity') { currentSettings.physicsElasticity = parseFloat(val) || 0.7; validKeysParsed++; }
+          if (key === 'physicsFloor') { currentSettings.physicsFloor = (val !== 'false'); validKeysParsed++; }
+          if (key === 'showXYZCoords') { currentSettings.showXYZCoords = (val === 'true'); validKeysParsed++; }
+          if (key === 'showGroundGrid') { currentSettings.showGroundGrid = (val === 'true'); validKeysParsed++; }
+          if (key === 'enableFPSMode') { currentSettings.enableFPSMode = (val === 'true'); validKeysParsed++; }
           if (key === 'activeModel') { currentSettings.activeModel = val || 'procedural'; validKeysParsed++; }
           if (key === 'activeAnimation') { currentSettings.activeAnimation = val || 'default'; validKeysParsed++; }
           if (key === 'clickCount') { currentSettings.clickCount = parseInt(val, 10) || 0; validKeysParsed++; }
@@ -1225,6 +1440,13 @@ language=en`;
       currentSettings.settingsLeft = false;
       currentSettings.lockPosition = false;
       currentSettings.viewOnly = false;
+      currentSettings.enablePhysics = false;
+      currentSettings.physicsGravity = 9.8;
+      currentSettings.physicsElasticity = 0.7;
+      currentSettings.physicsFloor = true;
+      currentSettings.showXYZCoords = false;
+      currentSettings.showGroundGrid = false;
+      currentSettings.enableFPSMode = false;
       currentSettings.activeModel = 'procedural';
       currentSettings.activeAnimation = 'default';
       currentSettings.clickCount = 0;
@@ -1267,6 +1489,13 @@ mouseOptimize=${currentSettings.mouseOptimize}
 settingsLeft=${currentSettings.settingsLeft}
 lockPosition=${currentSettings.lockPosition}
 viewOnly=${currentSettings.viewOnly}
+enablePhysics=${currentSettings.enablePhysics}
+physicsGravity=${currentSettings.physicsGravity}
+physicsElasticity=${currentSettings.physicsElasticity}
+physicsFloor=${currentSettings.physicsFloor}
+showXYZCoords=${currentSettings.showXYZCoords}
+showGroundGrid=${currentSettings.showGroundGrid}
+enableFPSMode=${currentSettings.enableFPSMode}
 activeModel=${currentSettings.activeModel}
 activeAnimation=${currentSettings.activeAnimation}
 clickCount=${currentSettings.clickCount}
@@ -1593,6 +1822,12 @@ function setupSettingsUI() {
   const settingsLeftCheck = document.getElementById('settings-left');
   const lockPositionCheck = document.getElementById('lock-position');
   const viewOnlyCheck = document.getElementById('view-only');
+  const enablePhysicsCheck = document.getElementById('enable-physics');
+  const physicsFloorCheck = document.getElementById('physics-floor');
+  const physicsGravitySlider = document.getElementById('physics-gravity');
+  const physicsElasticitySlider = document.getElementById('physics-elasticity');
+  const valPhysicsGravity = document.getElementById('val-physics-gravity');
+  const valPhysicsElasticity = document.getElementById('val-physics-elasticity');
   const modelSelect = document.getElementById('model-select');
   const animSelect = document.getElementById('anim-select');
   
@@ -1694,6 +1929,20 @@ function setupSettingsUI() {
     settingsLeftCheck.checked = currentSettings.settingsLeft;
     lockPositionCheck.checked = currentSettings.lockPosition;
     viewOnlyCheck.checked = currentSettings.viewOnly;
+    if (enablePhysicsCheck) enablePhysicsCheck.checked = currentSettings.enablePhysics;
+    if (physicsFloorCheck) physicsFloorCheck.checked = currentSettings.physicsFloor;
+    if (physicsGravitySlider) physicsGravitySlider.value = currentSettings.physicsGravity;
+    if (physicsElasticitySlider) physicsElasticitySlider.value = currentSettings.physicsElasticity;
+
+    const showXYZCheck = document.getElementById('show-xyz-coords');
+    const showGridCheck = document.getElementById('show-ground-grid');
+    const enableFpsCheck = document.getElementById('enable-fps-mode');
+    if (showXYZCheck) showXYZCheck.checked = !!currentSettings.showXYZCoords;
+    if (showGridCheck) showGridCheck.checked = !!currentSettings.showGroundGrid;
+    if (enableFpsCheck) enableFpsCheck.checked = !!currentSettings.enableFPSMode;
+
+    updateXYZVisibility();
+
     modelSelect.value = currentSettings.activeModel;
     populateAnimationDropdown();
 
@@ -1704,6 +1953,13 @@ function setupSettingsUI() {
     valSpeedX.innerText = currentSettings.speedX.toFixed(1);
     valSpeedY.innerText = currentSettings.speedY.toFixed(1);
     valSpeedZ.innerText = currentSettings.speedZ.toFixed(1);
+
+    if (valPhysicsGravity && physicsGravitySlider) {
+      valPhysicsGravity.innerText = parseFloat(physicsGravitySlider.value).toFixed(1);
+    }
+    if (valPhysicsElasticity && physicsElasticitySlider) {
+      valPhysicsElasticity.innerText = parseFloat(physicsElasticitySlider.value).toFixed(2);
+    }
 
     if (fontScaleSlider) {
       fontScaleSlider.value = currentSettings.fontSizeScale;
@@ -1746,6 +2002,17 @@ function setupSettingsUI() {
   speedZSlider.addEventListener('input', () => {
     valSpeedZ.innerText = parseFloat(speedZSlider.value).toFixed(1);
   });
+  
+  if (physicsGravitySlider && valPhysicsGravity) {
+    physicsGravitySlider.addEventListener('input', () => {
+      valPhysicsGravity.innerText = parseFloat(physicsGravitySlider.value).toFixed(1);
+    });
+  }
+  if (physicsElasticitySlider && valPhysicsElasticity) {
+    physicsElasticitySlider.addEventListener('input', () => {
+      valPhysicsElasticity.innerText = parseFloat(physicsElasticitySlider.value).toFixed(2);
+    });
+  }
   
   if (fontScaleSlider) {
     fontScaleSlider.addEventListener('input', () => {
@@ -1813,6 +2080,42 @@ function setupSettingsUI() {
     currentSettings.settingsLeft = settingsLeftCheck.checked;
     currentSettings.lockPosition = lockPositionCheck.checked;
     currentSettings.viewOnly = viewOnlyCheck.checked;
+
+    if (enablePhysicsCheck) currentSettings.enablePhysics = enablePhysicsCheck.checked;
+    if (physicsFloorCheck) currentSettings.physicsFloor = physicsFloorCheck.checked;
+    if (physicsGravitySlider) currentSettings.physicsGravity = parseFloat(physicsGravitySlider.value);
+    if (physicsElasticitySlider) currentSettings.physicsElasticity = parseFloat(physicsElasticitySlider.value);
+
+    const showXYZCheck = document.getElementById('show-xyz-coords');
+    const showGridCheck = document.getElementById('show-ground-grid');
+    const enableFpsCheck = document.getElementById('enable-fps-mode');
+    if (showXYZCheck) currentSettings.showXYZCoords = showXYZCheck.checked;
+    if (showGridCheck) currentSettings.showGroundGrid = showGridCheck.checked;
+    if (enableFpsCheck) {
+      const fpsWasEnabled = currentSettings.enableFPSMode;
+      currentSettings.enableFPSMode = enableFpsCheck.checked;
+      if (fpsWasEnabled && !currentSettings.enableFPSMode) {
+        camera.position.set(0, 0, 5.5);
+        camera.rotation.set(0, 0, 0);
+        cameraPitch = 0;
+        cameraYaw = 0;
+        fpsKeyW = fpsKeyA = fpsKeyS = fpsKeyD = fpsKeySpace = fpsKeyShift = false;
+      }
+    }
+
+    updateXYZVisibility();
+
+    // Apply config to Physics Engine
+    physicsEngine.configure({
+      enabled: currentSettings.enablePhysics,
+      gravity: currentSettings.physicsGravity,
+      restitution: currentSettings.physicsElasticity,
+      enableFloor: currentSettings.physicsFloor
+    });
+
+    if (!currentSettings.enablePhysics) {
+      physicsEngine.reset();
+    }
 
     const oldModel = currentSettings.activeModel;
     const newModel = modelSelect.value;
@@ -1954,6 +2257,39 @@ function setupSettingsUI() {
       }
     });
   }
+
+  const resetCameraBtn = document.getElementById('reset-camera-btn');
+  if (resetCameraBtn) {
+    resetCameraBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      resetCameraAndPosition();
+      showSpeechBubble("Camera & Position reset to initial state! 🔄", 2500);
+    });
+  }
+}
+
+function resetCameraAndPosition() {
+  if (camera) {
+    camera.position.set(0, 0, 5.5);
+    camera.rotation.set(0, 0, 0);
+  }
+  cameraPitch = 0;
+  cameraYaw = 0;
+  fpsKeyW = fpsKeyA = fpsKeyS = fpsKeyD = fpsKeySpace = fpsKeyShift = false;
+
+  if (characterGroup) {
+    characterGroup.position.set(0, 0, 0);
+    characterGroup.rotation.set(0.08, 0, 0);
+    const targetScale = hasSettingsFile ? currentSettings.scale : 1.0;
+    characterGroup.scale.set(targetScale, targetScale, targetScale);
+  }
+  if (innerModelGroup) {
+    innerModelGroup.position.set(0, 0, 0);
+    innerModelGroup.rotation.set(0, 0, 0);
+  }
+  if (physicsEngine) {
+    physicsEngine.reset();
+  }
 }
 
 const clock = new THREE.Clock();
@@ -2050,7 +2386,9 @@ function animate() {
     }
 
     // Smooth floating/bobbing up and down (applies to both custom and procedural if enabled)
-    if (currentSettings.bobbing) {
+    if (physicsEngine.enabled) {
+      physicsEngine.update(delta, characterGroup);
+    } else if (currentSettings.bobbing) {
       characterGroup.position.y = Math.sin(elapsed * 1.5) * 0.12;
       characterGroup.rotation.z = Math.sin(elapsed * 0.8) * 0.025;
       characterGroup.rotation.y = Math.sin(elapsed * 0.4) * 0.04;
@@ -2061,7 +2399,113 @@ function animate() {
     }
   }
 
+  // Update First-Person Perspective camera position (Plan 001)
+  if (currentSettings.enableFPSMode) {
+    updateFPSCamera(delta);
+  }
+
+  // Update 3D Spatial Helper position & HUD live values (Plan 001)
+  if (axesHelper && characterGroup) {
+    axesHelper.position.copy(characterGroup.position);
+  }
+
+  if (currentSettings.showXYZCoords) {
+    let posX, posY, posZ, rotX, rotY, rotZ;
+
+    if (currentSettings.enableFPSMode && camera) {
+      posX = camera.position.x.toFixed(2);
+      posY = camera.position.y.toFixed(2);
+      posZ = camera.position.z.toFixed(2);
+      rotX = Math.round(THREE.MathUtils.radToDeg(camera.rotation.x));
+      rotY = Math.round(THREE.MathUtils.radToDeg(camera.rotation.y));
+      rotZ = Math.round(THREE.MathUtils.radToDeg(camera.rotation.z));
+    } else {
+      posX = (characterGroup ? characterGroup.position.x : 0).toFixed(2);
+      posY = (characterGroup ? characterGroup.position.y : 0).toFixed(2);
+      posZ = (characterGroup ? characterGroup.position.z : 0).toFixed(2);
+
+      const rotMesh = innerModelGroup || characterGroup;
+      rotX = rotMesh ? Math.round(THREE.MathUtils.radToDeg(rotMesh.rotation.x)) : 0;
+      rotY = rotMesh ? Math.round(THREE.MathUtils.radToDeg(rotMesh.rotation.y)) : 0;
+      rotZ = rotMesh ? Math.round(THREE.MathUtils.radToDeg(rotMesh.rotation.z)) : 0;
+    }
+
+    const valX = document.getElementById('xyz-val-x');
+    const valY = document.getElementById('xyz-val-y');
+    const valZ = document.getElementById('xyz-val-z');
+    const valRx = document.getElementById('xyz-val-rx');
+    const valRy = document.getElementById('xyz-val-ry');
+    const valRz = document.getElementById('xyz-val-rz');
+
+    if (valX) valX.innerText = posX;
+    if (valY) valY.innerText = posY;
+    if (valZ) valZ.innerText = posZ;
+    if (valRx) valRx.innerText = `${rotX}°`;
+    if (valRy) valRy.innerText = `${rotY}°`;
+    if (valRz) valRz.innerText = `${rotZ}°`;
+  }
+
   renderer.render(scene, camera);
+}
+
+function updateFPSCamera(delta) {
+  if (!currentSettings.enableFPSMode || !camera) return;
+
+  const moveSpeed = 3.5;
+  const dist = moveSpeed * delta;
+
+  const forward = new THREE.Vector3();
+  camera.getWorldDirection(forward);
+
+  const right = new THREE.Vector3();
+  right.crossVectors(forward, camera.up).normalize();
+
+  if (fpsKeyW) camera.position.addScaledVector(forward, dist);
+  if (fpsKeyS) camera.position.addScaledVector(forward, -dist);
+  if (fpsKeyD) camera.position.addScaledVector(right, dist);
+  if (fpsKeyA) camera.position.addScaledVector(right, -dist);
+
+  if (fpsKeySpace) camera.position.y += moveSpeed * delta;
+  if (fpsKeyShift) camera.position.y -= moveSpeed * delta;
+}
+
+function updateXYZVisibility() {
+  if (axesHelper) axesHelper.visible = !!currentSettings.showXYZCoords;
+  if (gridHelper) gridHelper.visible = !!currentSettings.showGroundGrid;
+  
+  const hud = document.getElementById('xyz-hud-overlay');
+  if (hud) {
+    if (currentSettings.showXYZCoords) {
+      hud.classList.remove('hidden');
+    } else {
+      hud.classList.add('hidden');
+    }
+  }
+
+  const crosshair = document.getElementById('fps-crosshair');
+  if (crosshair) {
+    if (currentSettings.enableFPSMode && !isSettingsOpen) {
+      crosshair.classList.remove('hidden');
+      document.body.style.cursor = 'none';
+      if (renderer && renderer.domElement && document.pointerLockElement !== renderer.domElement) {
+        try {
+          renderer.domElement.requestPointerLock();
+        } catch (e) {
+          console.warn("Could not request pointer lock:", e);
+        }
+      }
+    } else {
+      crosshair.classList.add('hidden');
+      if (document.pointerLockElement) {
+        try {
+          document.exitPointerLock();
+        } catch (e) {}
+      }
+      if (!isMouseOverCharacter) {
+        document.body.style.cursor = 'default';
+      }
+    }
+  }
 }
 
 // Initialize on load
