@@ -11,6 +11,12 @@ const { pathToFileURL } = window.require('url');
 let scene, camera, renderer, characterGroup, innerModelGroup, collisionProxy;
 let axesHelper = null;
 let gridHelper = null;
+let stageSpotLights = [];
+let stageSpotLightHelpers = [];
+let ambientLight = null;
+let keyLight = null;
+let fillLight = null;
+let rimLight = null;
 let mixer;
 let idleAction = null;
 let reactAction = null;
@@ -52,6 +58,11 @@ let currentSettings = {
   showXYZCoords: false,
   showGroundGrid: false,
   enableFPSMode: false,
+  spotlights: [
+    { id: 1, enabled: true, angleH: 45, angleV: 60, cone: 35, intensity: 2.0, color: '#ffffff' }
+  ],
+  enableStudioLights: true,
+  ambientIntensity: 0.70,
   activeModel: 'procedural',
   activeAnimation: 'default',
   clickCount: 0,
@@ -127,7 +138,7 @@ async function init() {
   if (isDevMode) {
     document.body.classList.add('dev-mode');
   }
-  
+
   // Load settings configuration file if it exists in assets/
   hasSettingsFile = readSettingsFile();
 
@@ -167,18 +178,18 @@ async function init() {
   container.appendChild(renderer.domElement);
 
   // 4. Add Lights for a gorgeous glossy toy look
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+  ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
   scene.add(ambientLight);
 
-  const keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
+  keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
   keyLight.position.set(5, 8, 5);
   scene.add(keyLight);
 
-  const fillLight = new THREE.PointLight(0xffb6c1, 0.6, 15);
+  fillLight = new THREE.PointLight(0xffb6c1, 0.6, 15);
   fillLight.position.set(-4, -2, 3);
   scene.add(fillLight);
 
-  const rimLight = new THREE.DirectionalLight(0xffffff, 0.5);
+  rimLight = new THREE.DirectionalLight(0xffffff, 0.5);
   rimLight.position.set(0, 5, -5);
   scene.add(rimLight);
 
@@ -190,7 +201,10 @@ async function init() {
   gridHelper.position.y = -1.2;
   scene.add(gridHelper);
 
+  // 4.6. Add Controllable Stage Spotlight / Flashlight (Plan 002 & 004)
   updateXYZVisibility();
+  updateStageLighting();
+  updateSpotlightPosition();
 
   // 5. Auto-detect custom asset in assets/ or load procedural mascot
   detectAndLoadAsset();
@@ -217,8 +231,6 @@ async function init() {
   // Handle Resize
   window.addEventListener('resize', onWindowResize);
 
-
-
   // Listen for Steam overlay activation from main process
   ipcRenderer.on('steam-overlay-active', (event, active) => {
     if (active) {
@@ -236,6 +248,127 @@ async function init() {
       updateIgnoreMouseState();
     }
   });
+}
+
+function updateSpotlightPosition() {
+  if (!scene) return;
+
+  // Ensure currentSettings.spotlights array exists and is valid
+  if (!Array.isArray(currentSettings.spotlights) || currentSettings.spotlights.length === 0) {
+    currentSettings.spotlights = [{
+      id: 1,
+      enabled: true,
+      angleH: 45,
+      angleV: 60,
+      cone: 35,
+      intensity: 2.0,
+      color: '#ffffff'
+    }];
+  }
+
+  // Adjust THREE.SpotLight pool size matching currentSettings.spotlights.length
+  while (stageSpotLights.length < currentSettings.spotlights.length) {
+    const light = new THREE.SpotLight(0xffffff, 2.0, 30, Math.PI / 5, 0.4, 1.0);
+    light.target.position.set(0, 0, 0);
+    light.castShadow = true;
+    light.shadow.mapSize.width = 1024;
+    light.shadow.mapSize.height = 1024;
+    light.shadow.camera.near = 0.5;
+    light.shadow.camera.far = 30;
+    light.shadow.bias = -0.001;
+    scene.add(light);
+    scene.add(light.target);
+
+    const helper = new THREE.SpotLightHelper(light);
+    helper.visible = false;
+    scene.add(helper);
+
+    stageSpotLights.push(light);
+    stageSpotLightHelpers.push(helper);
+  }
+
+  // Remove excess lights if count decreased
+  while (stageSpotLights.length > currentSettings.spotlights.length) {
+    const light = stageSpotLights.pop();
+    const helper = stageSpotLightHelpers.pop();
+    if (light) {
+      scene.remove(light);
+      scene.remove(light.target);
+      if (light.dispose) light.dispose();
+    }
+    if (helper) {
+      scene.remove(helper);
+      if (helper.dispose) helper.dispose();
+    }
+  }
+
+  // Update properties for each spotlight in scene
+  currentSettings.spotlights.forEach((spotConfig, idx) => {
+    const light = stageSpotLights[idx];
+    const helper = stageSpotLightHelpers[idx];
+    if (!light) return;
+
+    const isEnabled = !!spotConfig.enabled;
+    light.visible = isEnabled;
+
+    if (helper) {
+      helper.visible = isEnabled && isSettingsOpen;
+    }
+
+    if (!isEnabled) return;
+
+    const angleH = typeof spotConfig.angleH === 'number' ? spotConfig.angleH : 45;
+    const angleV = typeof spotConfig.angleV === 'number' ? spotConfig.angleV : 60;
+    const coneDeg = typeof spotConfig.cone === 'number' ? spotConfig.cone : 35;
+    const intensity = typeof spotConfig.intensity === 'number' ? spotConfig.intensity : 2.0;
+
+    const radH = angleH * (Math.PI / 180);
+    const radV = angleV * (Math.PI / 180);
+    const radCone = (coneDeg * Math.PI) / 180;
+
+    const radius = 6.0;
+    const cosV = Math.cos(radV);
+    const sinV = Math.sin(radV);
+    const sinH = Math.sin(radH);
+    const cosH = Math.cos(radH);
+
+    const x = radius * cosV * sinH;
+    const y = radius * sinV;
+    const z = radius * cosV * cosH;
+
+    light.position.set(x, y, z);
+    light.angle = radCone;
+    light.intensity = intensity;
+
+    if (spotConfig.color) {
+      light.color.set(spotConfig.color);
+    }
+
+    if (helper && helper.visible) {
+      helper.update();
+    }
+  });
+}
+
+function updateStageLighting() {
+  if (!ambientLight) return;
+
+  const isStudioEnabled = currentSettings.enableStudioLights !== false;
+  const masterAmb = typeof currentSettings.ambientIntensity === 'number' ? currentSettings.ambientIntensity : 0.7;
+
+  if (!isStudioEnabled) {
+    ambientLight.intensity = 0;
+    if (keyLight) keyLight.intensity = 0;
+    if (fillLight) fillLight.intensity = 0;
+    if (rimLight) rimLight.intensity = 0;
+  } else {
+    // Proportional scaling based on master ambient intensity relative to standard 0.7 baseline
+    const factor = masterAmb / 0.7;
+    ambientLight.intensity = masterAmb;
+    if (keyLight) keyLight.intensity = 1.0 * factor;
+    if (fillLight) fillLight.intensity = 0.6 * factor;
+    if (rimLight) rimLight.intensity = 0.5 * factor;
+  }
 }
 
 function createMascot() {
@@ -296,7 +429,7 @@ function createMascot() {
   // Left Eye
   const leftEye = new THREE.Mesh(eyeGeom, eyeMaterial);
   leftEye.position.set(-0.35, 0.05, 0.9);
-  
+
   const leftEyeHighlight1 = new THREE.Mesh(highlightGeom, eyeHighlightMaterial);
   leftEyeHighlight1.position.set(-0.30, 0.11, 0.99);
   innerModelGroup.add(leftEye);
@@ -305,7 +438,7 @@ function createMascot() {
   // Right Eye
   const rightEye = new THREE.Mesh(eyeGeom, eyeMaterial);
   rightEye.position.set(0.35, 0.05, 0.9);
-  
+
   const rightEyeHighlight1 = new THREE.Mesh(highlightGeom, eyeHighlightMaterial);
   rightEyeHighlight1.position.set(0.40, 0.11, 0.99);
   innerModelGroup.add(rightEye);
@@ -313,7 +446,7 @@ function createMascot() {
 
   // --- Blush Cheeks ---
   const blushGeom = new THREE.SphereGeometry(0.16, 16, 16);
-  
+
   const leftBlush = new THREE.Mesh(blushGeom, blushMaterial);
   leftBlush.scale.set(1, 0.6, 0.2);
   leftBlush.position.set(-0.55, -0.12, 0.88);
@@ -336,7 +469,7 @@ function createMascot() {
 
   // --- Bunny/Cat Ears ---
   const earGeom = new THREE.ConeGeometry(0.2, 0.8, 18);
-  
+
   // Left Ear
   const leftEarGroup = new THREE.Group();
   leftEarGroup.position.set(-0.45, 0.6, 0);
@@ -432,18 +565,21 @@ function setupInteraction() {
       }
     }
 
+    // Toggle body class so settings ⚙️ and close ✖ buttons only show up when mouse is directly on top of UI buttons or settings panel is open
+    document.body.classList.toggle('mouse-over-mascot', isMouseOverUI || isSettingsOpen);
+
     // When View-Only Mode is active on hover, ignore mouse focus so clicks pass through
     const effectiveHover = isMouseOverCharacter && !isViewOnlyActive;
 
-    const shouldFocus = isSettingsOpen || 
-                        effectiveHover || 
-                        isMouseOverUI || 
-                        isDragging || 
-                        isNavigating || 
-                        currentSettings.enableFPSMode ||
-                        altKeyHeld || 
-                        shiftKeyHeld || 
-                        ctrlKeyHeld;
+    const shouldFocus = isSettingsOpen ||
+      effectiveHover ||
+      isMouseOverUI ||
+      isDragging ||
+      isNavigating ||
+      currentSettings.enableFPSMode ||
+      altKeyHeld ||
+      shiftKeyHeld ||
+      ctrlKeyHeld;
 
     ipcRenderer.send('set-ignore-mouse', !shouldFocus);
   }
@@ -460,10 +596,10 @@ function setupInteraction() {
       const sensitivity = 0.003;
       cameraYaw -= event.movementX * sensitivity;
       cameraPitch -= event.movementY * sensitivity;
-      
+
       const maxPitch = Math.PI / 2 - 0.02;
       cameraPitch = Math.max(-maxPitch, Math.min(maxPitch, cameraPitch));
-      
+
       camera.rotation.set(cameraPitch, cameraYaw, 0, 'YXZ');
       return;
     }
@@ -542,7 +678,7 @@ function setupInteraction() {
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
     raycaster.setFromCamera(mouse, camera);
-    
+
     // Raycast against simplified box proxy (Seamless Mode) or recursively through full meshes (Precise Mode)
     let intersects = [];
     if (currentSettings.mouseOptimize && collisionProxy) {
@@ -569,7 +705,16 @@ function setupInteraction() {
   });
 
   window.addEventListener('mousedown', (event) => {
-    if (isSettingsOpen) return;
+    const gearBtn = document.getElementById('settings-btn');
+    const closeBtn = document.getElementById('app-close-btn');
+    const settingsHeader = document.getElementById('settings-header');
+
+    const isClickOnHeader = settingsHeader && settingsHeader.contains(event.target);
+    const isClickOnGear = gearBtn && gearBtn.contains(event.target);
+    const isClickOnClose = closeBtn && closeBtn.contains(event.target);
+
+    if (isClickOnClose) return;
+    if (isSettingsOpen && !isClickOnHeader && !isClickOnGear) return;
 
     if (currentSettings.enableFPSMode && renderer && renderer.domElement) {
       if (document.pointerLockElement !== renderer.domElement) {
@@ -624,7 +769,7 @@ function setupInteraction() {
         event.preventDefault();
         isPhysicsDragging = true;
         isDragging = false; // Do NOT drag Electron window!
-        
+
         if (!physicsEngine.enabled) {
           physicsEngine.configure({ enabled: true });
           currentSettings.enablePhysics = true;
@@ -645,28 +790,34 @@ function setupInteraction() {
       const gearBtn = document.getElementById('settings-btn');
       const closeBtn = document.getElementById('app-close-btn');
       const settingsPanel = document.getElementById('settings-panel');
-      
+      const settingsHeader = document.getElementById('settings-header');
+
       const isClickOnGear = gearBtn && gearBtn.contains(event.target);
       const isClickOnClose = closeBtn && closeBtn.contains(event.target);
+      const isClickOnHeader = settingsHeader && settingsHeader.contains(event.target);
       const isClickOnPanel = settingsPanel && settingsPanel.contains(event.target);
       const isClickOnInteractive = event.target.closest('input, select, button, textarea');
-      
+
       if (isClickOnClose) return;
 
-      const shouldDrag = isMouseOverCharacter || 
-                         isClickOnGear || 
-                         (isClickOnPanel && !isClickOnInteractive);
-                         
+      const shouldDrag = isMouseOverCharacter ||
+        isClickOnGear ||
+        isClickOnHeader ||
+        (isClickOnPanel && !isClickOnInteractive);
+
       if (shouldDrag) {
         isDragging = true;
         dragStartScreenX = event.screenX;
         dragStartScreenY = event.screenY;
         dragMoveDistance = 0;
         document.body.style.cursor = 'grabbing';
-        
+        if (settingsHeader && isClickOnHeader) {
+          settingsHeader.style.cursor = 'grabbing';
+        }
+
         dragStartedOnMascot = isMouseOverCharacter;
         isDraggingGear = isClickOnGear;
-        
+
         physicsEngine.onDragStart(event.screenX, event.screenY);
         updateIgnoreMouseState();
       }
@@ -701,6 +852,8 @@ function setupInteraction() {
     if (isDragging) {
       isDragging = false;
       physicsEngine.onDragEnd(event.screenX, event.screenY);
+      const settingsHeader = document.getElementById('settings-header');
+      if (settingsHeader) settingsHeader.style.cursor = 'grab';
       document.body.style.cursor = isMouseOverCharacter ? 'pointer' : 'default';
       updateIgnoreMouseState();
 
@@ -737,7 +890,7 @@ function setupInteraction() {
     if (event.key === 'Shift') shiftKeyHeld = true;
     if (event.key === 'Control') ctrlKeyHeld = true;
     if (event.key === 'd' || event.key === 'D' || event.code === 'KeyD') keyDHeld = true;
-    
+
     // FPS Movement Key Tracking & Exit on ESC (Plan 001)
     const activeEl = document.activeElement;
     const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable);
@@ -796,16 +949,16 @@ function setupInteraction() {
       if (!isTyping) {
         event.preventDefault();
         currentSettings.viewOnly = !currentSettings.viewOnly;
-        
+
         // Sync setting checkbox in UI
         const viewOnlyCheck = document.getElementById('view-only');
         if (viewOnlyCheck) {
           viewOnlyCheck.checked = currentSettings.viewOnly;
         }
-        
+
         saveSettingsFile();
         updateIgnoreMouseState();
-        
+
         showSpeechBubble(currentSettings.viewOnly ? "View Only Mode: Enabled 👁️" : "View Only Mode: Disabled 🐰", 2500);
       }
     }
@@ -1060,7 +1213,7 @@ function getAssetsPath() {
 function scanForModels() {
   discoveredModels = [];
   const assetsDir = getAssetsPath();
-  
+
   if (!fs.existsSync(assetsDir)) {
     try {
       fs.mkdirSync(assetsDir, { recursive: true });
@@ -1085,13 +1238,13 @@ function scanForModels() {
 
 function detectAndLoadAsset() {
   scanForModels();
-  
+
   if (currentSettings.activeModel === 'procedural') {
     console.log('Active mascot is procedural bunny.');
     createMascot();
     return;
   }
-  
+
   if (currentSettings.activeModel && discoveredModels.includes(currentSettings.activeModel)) {
     const assetsDir = getAssetsPath();
     const fullPath = path.join(assetsDir, currentSettings.activeModel);
@@ -1099,7 +1252,7 @@ function detectAndLoadAsset() {
     loadCustomModel(fullPath);
     return;
   }
-  
+
   // Fallback if activeModel doesn't exist
   if (discoveredModels.length > 0) {
     currentSettings.activeModel = discoveredModels[0];
@@ -1109,7 +1262,7 @@ function detectAndLoadAsset() {
     loadCustomModel(fullPath);
     return;
   }
-  
+
   console.log('No custom asset found. Defaulting to procedural mascot.');
   currentSettings.activeModel = 'procedural';
   createMascot();
@@ -1130,7 +1283,7 @@ function fallbackToProcedural() {
   if (characterGroup) {
     scene.remove(characterGroup);
   }
-  
+
   // Reset window viewport and camera settings back to defaults
   const defaultSize = 350;
   camera.aspect = 1.0;
@@ -1138,7 +1291,7 @@ function fallbackToProcedural() {
   renderer.setSize(defaultSize, defaultSize);
   camera.position.set(0, 0, 5.5);
   ipcRenderer.send('resize-window', { width: defaultSize, height: defaultSize });
-  
+
   createMascot();
 }
 
@@ -1172,16 +1325,16 @@ function loadCustomModel(filePath) {
 
       // Center model geometry relative to characterGroup pivot
       model.position.set(-center.x, -center.y, -center.z);
-      
+
       const padding = 1.35;
 
       // Load model at its original size scale (1, 1, 1) without resizing the asset
       const innerGroup = new THREE.Group();
       innerGroup.add(model);
-      
+
       // Auto-grounding: align model base/feet to the bottom viewport boundary
       innerGroup.position.y = - size.y * (padding - 1) / 2;
-      
+
       characterGroup.add(innerGroup);
       innerModelGroup = innerGroup;
 
@@ -1218,18 +1371,18 @@ function loadCustomModel(filePath) {
         // Dynamically calculate the ideal desktop window size in pixels
         let winWidth = Math.round(size.x * pixelsPerUnit * padding);
         let winHeight = Math.round(size.y * pixelsPerUnit * padding);
-        
+
         // Limit bounds to keep it reasonable (min 150px, max 800px)
         winWidth = Math.max(150, Math.min(800, winWidth));
         winHeight = Math.max(150, Math.min(800, winHeight));
-        
+
         // Update WebGL viewports
         const targetW = winWidth - 20;
         const targetH = winHeight - 20;
         camera.aspect = targetW / targetH;
         camera.updateProjectionMatrix();
         renderer.setSize(targetW, targetH);
-        
+
         // Position camera Z so the original model size fits comfortably
         const visibleHeight = size.y * padding;
         const zPos = visibleHeight / (2 * Math.tan((camera.fov * Math.PI) / 360));
@@ -1242,14 +1395,14 @@ function loadCustomModel(filePath) {
       // Load animations
       loadedAnimations = gltf.animations || [];
       availableAnimations = loadedAnimations.map(clip => clip.name || '');
-      
+
       idleAction = null;
       reactAction = null;
       if (loadedAnimations.length > 0) {
         mixer = new THREE.AnimationMixer(model);
         applySelectedAnimation();
       }
-      
+
       customModelLoaded = true;
       console.log('Successfully loaded custom model at original scale:', filePath);
 
@@ -1270,23 +1423,23 @@ function loadCustomModel(filePath) {
 
 function applySelectedAnimation() {
   if (!mixer) return;
-  
+
   mixer.stopAllAction();
   idleAction = null;
   reactAction = null;
-  
+
   if (currentSettings.activeAnimation === 'none') {
     console.log('Animation is set to none (static pose).');
     return;
   }
-  
+
   let targetClip = null;
-  
+
   // 1. Try to find clip by name
   if (currentSettings.activeAnimation !== 'default') {
     targetClip = loadedAnimations.find(clip => clip.name === currentSettings.activeAnimation);
   }
-  
+
   // 2. Auto-detect/identify if "default" is selected or targetClip not found
   if (!targetClip && loadedAnimations.length > 0) {
     // Find idle clip using keyword matching
@@ -1300,7 +1453,7 @@ function applySelectedAnimation() {
       targetClip = loadedAnimations[0];
     }
   }
-  
+
   // Auto-detect reaction/interact clip using keyword matching
   if (loadedAnimations.length > 1) {
     const reactKeywords = ['jump', 'spin', 'click', 'react', 'interact', 'pet', 'wave', 'dance', 'happy'];
@@ -1315,7 +1468,7 @@ function applySelectedAnimation() {
       console.log('Auto-detected reaction animation:', reactClip.name);
     }
   }
-  
+
   if (targetClip) {
     console.log('Playing active animation loop:', targetClip.name);
     idleAction = mixer.clipAction(targetClip);
@@ -1327,11 +1480,11 @@ function readSettingsFile() {
   const assetsDir = getAssetsPath();
   const settingsFile = path.join(assetsDir, 'settings');
   const settingsTxtFile = path.join(assetsDir, 'settings.txt');
-  
+
   let filePath = null;
   if (fs.existsSync(settingsFile)) filePath = settingsFile;
   else if (fs.existsSync(settingsTxtFile)) filePath = settingsTxtFile;
-  
+
   const defaultContent = `width=350
 height=350
 scale=1.0
@@ -1372,7 +1525,7 @@ language=en`;
       console.error('Error creating default settings file:', e);
     }
   }
-  
+
   if (filePath && fs.existsSync(filePath)) {
     try {
       const data = fs.readFileSync(filePath, 'utf8');
@@ -1408,6 +1561,22 @@ language=en`;
           if (key === 'showXYZCoords') { currentSettings.showXYZCoords = (val === 'true'); validKeysParsed++; }
           if (key === 'showGroundGrid') { currentSettings.showGroundGrid = (val === 'true'); validKeysParsed++; }
           if (key === 'enableFPSMode') { currentSettings.enableFPSMode = (val === 'true'); validKeysParsed++; }
+          if (key === 'spotlights') {
+            try {
+              currentSettings.spotlights = JSON.parse(val);
+            } catch (e) {
+              currentSettings.spotlights = null;
+            }
+            validKeysParsed++;
+          }
+          if (key === 'enableSpotlight') { currentSettings.enableSpotlight = (val === 'true'); validKeysParsed++; }
+          if (key === 'spotlightAngleH') { currentSettings.spotlightAngleH = parseInt(val, 10) || 45; validKeysParsed++; }
+          if (key === 'spotlightAngleV') { currentSettings.spotlightAngleV = parseInt(val, 10) || 60; validKeysParsed++; }
+          if (key === 'spotlightCone') { currentSettings.spotlightCone = parseInt(val, 10) || 35; validKeysParsed++; }
+          if (key === 'spotlightIntensity') { currentSettings.spotlightIntensity = parseFloat(val) || 2.0; validKeysParsed++; }
+          if (key === 'spotlightColor') { currentSettings.spotlightColor = val || '#ffffff'; validKeysParsed++; }
+          if (key === 'enableStudioLights') { currentSettings.enableStudioLights = (val !== 'false'); validKeysParsed++; }
+          if (key === 'ambientIntensity') { currentSettings.ambientIntensity = parseFloat(val) !== undefined && !isNaN(parseFloat(val)) ? parseFloat(val) : 0.70; validKeysParsed++; }
           if (key === 'activeModel') { currentSettings.activeModel = val || 'procedural'; validKeysParsed++; }
           if (key === 'activeAnimation') { currentSettings.activeAnimation = val || 'default'; validKeysParsed++; }
           if (key === 'clickCount') { currentSettings.clickCount = parseInt(val, 10) || 0; validKeysParsed++; }
@@ -1423,7 +1592,7 @@ language=en`;
       console.error('Error reading/parsing settings file. Resetting to defaults:', e);
       wasConfigHealed = true;
       ipcRenderer.send('log-diagnostic', `[Config Recovery] Settings file corrupted/empty: ${e.message || e}. Restoring factory defaults and rewriting file.`);
-      
+
       // Reset to safe default settings in memory
       currentSettings.width = 350;
       currentSettings.height = 350;
@@ -1447,12 +1616,17 @@ language=en`;
       currentSettings.showXYZCoords = false;
       currentSettings.showGroundGrid = false;
       currentSettings.enableFPSMode = false;
+      currentSettings.spotlights = [
+        { id: 1, enabled: true, angleH: 45, angleV: 60, cone: 35, intensity: 2.0, color: '#ffffff' }
+      ];
+      currentSettings.enableStudioLights = true;
+      currentSettings.ambientIntensity = 0.70;
       currentSettings.activeModel = 'procedural';
       currentSettings.activeAnimation = 'default';
       currentSettings.clickCount = 0;
       currentSettings.fontSizeScale = 1.0;
       currentSettings.language = 'en';
-      
+
       // Attempt recovery write
       try {
         const tmpPath = filePath + '.tmp';
@@ -1473,7 +1647,7 @@ function saveSettingsFile() {
   const settingsFile = path.join(assetsDir, 'settings');
   const settingsTxtFile = path.join(assetsDir, 'settings.txt');
   const filePath = fs.existsSync(settingsTxtFile) ? settingsTxtFile : settingsFile;
-  
+
   const content = `width=${currentSettings.width}
 height=${currentSettings.height}
 scale=${currentSettings.scale}
@@ -1496,6 +1670,9 @@ physicsFloor=${currentSettings.physicsFloor}
 showXYZCoords=${currentSettings.showXYZCoords}
 showGroundGrid=${currentSettings.showGroundGrid}
 enableFPSMode=${currentSettings.enableFPSMode}
+spotlights=${JSON.stringify(currentSettings.spotlights || [])}
+enableStudioLights=${currentSettings.enableStudioLights}
+ambientIntensity=${currentSettings.ambientIntensity}
 activeModel=${currentSettings.activeModel}
 activeAnimation=${currentSettings.activeAnimation}
 clickCount=${currentSettings.clickCount}
@@ -1523,18 +1700,18 @@ function generateModelPreview(modelKey) {
     }
   }
   const previewPath = path.join(previewsDir, `${modelKey}.png`);
-  
+
   if (fs.existsSync(previewPath)) return;
 
   // Render a frame synchronously onto the canvas back buffer so it's fully painted
   renderer.render(scene, camera);
-  
+
   try {
     const dataUrl = renderer.domElement.toDataURL("image/png");
     const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
     fs.writeFileSync(previewPath, base64Data, 'base64');
     console.log(`Generated thumbnail preview for: ${modelKey}`);
-    
+
     // Refresh settings grid view if open
     populateModelDropdown();
   } catch (e) {
@@ -1547,45 +1724,45 @@ function populateModelDropdown() {
   const gridContainer = document.getElementById('model-select-grid');
   const modelSelect = document.getElementById('model-select');
   if (!gridContainer || !modelSelect) return;
-  
+
   gridContainer.innerHTML = '';
-  
+
   const options = ['procedural', ...discoveredModels];
   const assetsDir = getAssetsPath();
-  
+
   options.forEach(modelKey => {
     const card = document.createElement('div');
     card.className = 'mascot-card';
     if (currentSettings.activeModel === modelKey) {
       card.classList.add('selected');
     }
-    
+
     const img = document.createElement('img');
     img.className = 'mascot-thumbnail';
     img.dataset.mascot = modelKey; // Bind dataset key for targeted dynamic updates
-    
+
     const previewPath = path.join(assetsDir, '.previews', `${modelKey}.png`);
     if (fs.existsSync(previewPath)) {
       img.src = pathToFileURL(previewPath).href + "?t=" + Date.now();
     } else {
       img.src = './assets/bunny_icon.png';
     }
-    
+
     const label = document.createElement('div');
     label.className = 'mascot-card-label';
     label.textContent = modelKey === 'procedural' ? 'Pink Bunny' : modelKey.replace(/\.(glb|gltf)$/i, '');
-    
+
     card.appendChild(img);
     card.appendChild(label);
-    
+
     card.addEventListener('click', () => {
       gridContainer.querySelectorAll('.mascot-card').forEach(c => c.classList.remove('selected'));
       card.classList.add('selected');
-      
+
       modelSelect.value = modelKey;
       modelSelect.dispatchEvent(new Event('change'));
     });
-    
+
     gridContainer.appendChild(card);
   });
 }
@@ -1594,7 +1771,7 @@ function startBackgroundPreviewGenerator() {
   scanForModels();
   const assetsDir = getAssetsPath();
   const previewsDir = path.join(assetsDir, '.previews');
-  
+
   if (!fs.existsSync(previewsDir)) {
     try {
       fs.mkdirSync(previewsDir, { recursive: true });
@@ -1602,13 +1779,13 @@ function startBackgroundPreviewGenerator() {
       return;
     }
   }
-  
+
   const allModels = ['procedural', ...discoveredModels];
   const queue = allModels.filter(modelKey => {
     const previewPath = path.join(previewsDir, `${modelKey}.png`);
     return !fs.existsSync(previewPath);
   });
-  
+
   if (queue.length > 0) {
     console.log(`Starting background preview generator for ${queue.length} models:`, queue);
     const intervalId = setInterval(() => {
@@ -1616,7 +1793,7 @@ function startBackgroundPreviewGenerator() {
         clearInterval(intervalId);
         return;
       }
-      
+
       const nextModel = queue.shift();
       generateMascotPreviewInBackground(nextModel);
     }, 2000);
@@ -1627,24 +1804,24 @@ function generateMascotPreviewInBackground(modelKey) {
   const assetsDir = getAssetsPath();
   const previewsDir = path.join(assetsDir, '.previews');
   const previewPath = path.join(previewsDir, `${modelKey}.png`);
-  
+
   if (fs.existsSync(previewPath)) return;
-  
+
   const originalVisible = characterGroup ? characterGroup.visible : true;
-  
+
   if (modelKey === 'procedural') {
     // Hide active character
     if (characterGroup) characterGroup.visible = false;
-    
+
     const tempGroup = new THREE.Group();
     scene.add(tempGroup);
-    
+
     // Recreate procedural bunny meshes locally
     const bodyGeom = new THREE.SphereGeometry(0.7, 32, 32);
     const bodyMat = new THREE.MeshLambertMaterial({ color: 0xff7597 });
     const body = new THREE.Mesh(bodyGeom, bodyMat);
     tempGroup.add(body);
-    
+
     const eyeGeom = new THREE.SphereGeometry(0.08, 16, 16);
     const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
     const leftEye = new THREE.Mesh(eyeGeom, eyeMat);
@@ -1653,7 +1830,7 @@ function generateMascotPreviewInBackground(modelKey) {
     const rightEye = leftEye.clone();
     rightEye.position.x = -0.2;
     tempGroup.add(rightEye);
-    
+
     const earGeom = new THREE.BoxGeometry(0.18, 0.9, 0.12);
     const leftEar = new THREE.Mesh(earGeom, bodyMat);
     leftEar.position.set(0.3, 0.9, 0);
@@ -1663,14 +1840,14 @@ function generateMascotPreviewInBackground(modelKey) {
     rightEar.position.x = -0.3;
     rightEar.rotation.z = 0.15;
     tempGroup.add(rightEar);
-    
+
     const noseGeom = new THREE.ConeGeometry(0.06, 0.08, 4);
     const noseMat = new THREE.MeshBasicMaterial({ color: 0xffb7c5 });
     const nose = new THREE.Mesh(noseGeom, noseMat);
     nose.position.set(0, 0.08, 0.68);
     nose.rotation.x = Math.PI;
     tempGroup.add(nose);
-    
+
     const cheekGeom = new THREE.SphereGeometry(0.09, 16, 16);
     const cheekMat = new THREE.MeshBasicMaterial({ color: 0xffa3b1 });
     const leftCheek = new THREE.Mesh(cheekGeom, cheekMat);
@@ -1679,19 +1856,19 @@ function generateMascotPreviewInBackground(modelKey) {
     const rightCheek = leftCheek.clone();
     rightCheek.position.x = -0.35;
     tempGroup.add(rightCheek);
-    
+
     tempGroup.rotation.y = 0.4;
     tempGroup.rotation.x = 0.08;
-    
+
     // Synchronously render to paint buffer
     renderer.render(scene, camera);
-    
+
     try {
       const dataUrl = renderer.domElement.toDataURL("image/png");
       const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
       fs.writeFileSync(previewPath, base64Data, 'base64');
       console.log(`Generated background preview for: procedural`);
-      
+
       const imgEl = document.querySelector(`.mascot-thumbnail[data-mascot="procedural"]`);
       if (imgEl) {
         imgEl.src = pathToFileURL(previewPath).href + "?t=" + Date.now();
@@ -1699,59 +1876,59 @@ function generateMascotPreviewInBackground(modelKey) {
     } catch (e) {
       console.warn("Failed background capture for procedural bunny:", e);
     }
-    
+
     scene.remove(tempGroup);
     if (characterGroup) characterGroup.visible = originalVisible;
-    
+
   } else {
     // Load custom GLB/GLTF model in background
     const filePath = path.join(assetsDir, modelKey);
     let fileUrl = filePath;
     try {
       fileUrl = pathToFileURL(filePath).href;
-    } catch (e) {}
-    
+    } catch (e) { }
+
     const loader = new GLTFLoader();
     loader.load(fileUrl, (gltf) => {
       const tempModel = gltf.scene;
-      
+
       // Hide active character
       if (characterGroup) characterGroup.visible = false;
-      
+
       const tempGroup = new THREE.Group();
       scene.add(tempGroup);
-      
+
       // Center and scale model
       const box = new THREE.Box3().setFromObject(tempModel);
       const size = box.getSize(new THREE.Vector3());
       const center = box.getCenter(new THREE.Vector3());
-      
+
       tempModel.position.set(-center.x, -center.y, -center.z);
-      
+
       const padding = 1.35;
       const innerGroup = new THREE.Group();
       innerGroup.add(tempModel);
       innerGroup.position.y = - size.y * (padding - 1) / 2;
       tempGroup.add(innerGroup);
-      
+
       // Save original camera configuration
       const origAspect = camera.aspect;
       const origPos = camera.position.clone();
-      
+
       // Set temporary framing camera coordinates
       const visibleHeight = size.y * padding;
       const zPos = visibleHeight / (2 * Math.tan((camera.fov * Math.PI) / 360));
       camera.position.set(0, 0, zPos + (size.z / 2));
-      
+
       // Render frame
       renderer.render(scene, camera);
-      
+
       try {
         const dataUrl = renderer.domElement.toDataURL("image/png");
         const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
         fs.writeFileSync(previewPath, base64Data, 'base64');
         console.log(`Generated background preview for custom model: ${modelKey}`);
-        
+
         const imgEl = document.querySelector(`.mascot-thumbnail[data-mascot="${modelKey}"]`);
         if (imgEl) {
           imgEl.src = pathToFileURL(previewPath).href + "?t=" + Date.now();
@@ -1759,14 +1936,14 @@ function generateMascotPreviewInBackground(modelKey) {
       } catch (e) {
         console.warn(`Failed background capture for custom model: ${modelKey}`, e);
       }
-      
+
       // Clean up & Restore
       scene.remove(tempGroup);
       camera.aspect = origAspect;
       camera.position.copy(origPos);
       camera.updateProjectionMatrix();
       if (characterGroup) characterGroup.visible = originalVisible;
-      
+
     }, undefined, (err) => {
       console.warn(`Failed to load ${modelKey} for background preview:`, err);
     });
@@ -1787,16 +1964,16 @@ function forceRefreshAllPreviews() {
       console.warn("Could not clear previews folder:", e);
     }
   }
-  
+
   // Set all grid card images back to the default fallback icon
   const thumbnails = document.querySelectorAll('.mascot-thumbnail');
   thumbnails.forEach(img => {
     img.src = './assets/bunny_icon.png';
   });
-  
+
   // Trigger background preview generator queue to recreate previews offscreen
   startBackgroundPreviewGenerator();
-  
+
   ipcRenderer.send('log-diagnostic', '[Preview Refresh] All mascot thumbnail previews refreshed.');
 }
 
@@ -1808,15 +1985,15 @@ function setupSettingsUI() {
   const heightSlider = document.getElementById('win-height');
   const scaleSlider = document.getElementById('model-scale');
   const bobbingCheck = document.getElementById('model-bobbing');
-  
+
   const spinXCheck = document.getElementById('spin-x');
   const spinYCheck = document.getElementById('spin-y');
   const spinZCheck = document.getElementById('spin-z');
-  
+
   const speedXSlider = document.getElementById('speed-x');
   const speedYSlider = document.getElementById('speed-y');
   const speedZSlider = document.getElementById('speed-z');
-  
+
   const gpuOptimizeCheck = document.getElementById('gpu-optimize');
   const mouseOptimizeCheck = document.getElementById('mouse-optimize');
   const settingsLeftCheck = document.getElementById('settings-left');
@@ -1830,18 +2007,240 @@ function setupSettingsUI() {
   const valPhysicsElasticity = document.getElementById('val-physics-elasticity');
   const modelSelect = document.getElementById('model-select');
   const animSelect = document.getElementById('anim-select');
-  
+
   const valWidth = document.getElementById('val-width');
   const valHeight = document.getElementById('val-height');
   const valScale = document.getElementById('val-scale');
-  
+
   const valSpeedX = document.getElementById('val-speed-x');
   const valSpeedY = document.getElementById('val-speed-y');
   const valSpeedZ = document.getElementById('val-speed-z');
-  
+
   const fontScaleSlider = document.getElementById('font-scale');
   const valFontScale = document.getElementById('val-font-scale');
-  
+
+  const enableStudioLightsCheck = document.getElementById('enable-studio-lights');
+  const ambientIntensitySlider = document.getElementById('ambient-intensity');
+  const valAmbientIntensity = document.getElementById('val-ambient-intensity');
+  const btnDarkStage = document.getElementById('btn-dark-stage');
+  const btnDualConcert = document.getElementById('btn-dual-concert');
+  const addSpotlightBtn = document.getElementById('add-spotlight-btn');
+
+  // Studio Tab Switching Logic (Plan 005)
+  const tabButtons = Array.from(document.querySelectorAll('.studio-tab-btn'));
+  const tabContents = document.querySelectorAll('.studio-tab-content');
+  const tabBar = document.getElementById('studio-tab-bar');
+  const tabNavLeft = document.getElementById('tab-nav-left');
+  const tabNavRight = document.getElementById('tab-nav-right');
+
+  const activateTab = (btn) => {
+    if (!btn) return;
+    const targetTabId = btn.getAttribute('data-tab');
+
+    tabButtons.forEach(b => b.classList.remove('active'));
+    tabContents.forEach(c => c.classList.remove('active'));
+
+    btn.classList.add('active');
+    const targetContent = document.getElementById(targetTabId);
+    if (targetContent) targetContent.classList.add('active');
+
+    if (btn.scrollIntoView) {
+      btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  };
+
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => activateTab(btn));
+  });
+
+  if (tabNavLeft) {
+    tabNavLeft.addEventListener('click', () => {
+      const activeIdx = tabButtons.findIndex(b => b.classList.contains('active'));
+      if (activeIdx > 0) {
+        activateTab(tabButtons[activeIdx - 1]);
+      } else if (tabBar) {
+        tabBar.scrollBy({ left: -80, behavior: 'smooth' });
+      }
+    });
+  }
+
+  if (tabNavRight) {
+    tabNavRight.addEventListener('click', () => {
+      const activeIdx = tabButtons.findIndex(b => b.classList.contains('active'));
+      if (activeIdx >= 0 && activeIdx < tabButtons.length - 1) {
+        activateTab(tabButtons[activeIdx + 1]);
+      } else if (tabBar) {
+        tabBar.scrollBy({ left: 80, behavior: 'smooth' });
+      }
+    });
+  }
+
+  const renderSpotlightCardsUI = () => {
+    const container = document.getElementById('spotlight-cards-container');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (!Array.isArray(currentSettings.spotlights) || currentSettings.spotlights.length === 0) {
+      currentSettings.spotlights = [
+        { id: 1, enabled: true, angleH: 45, angleV: 60, cone: 35, intensity: 2.0, color: '#ffffff' }
+      ];
+    }
+
+    if (addSpotlightBtn) {
+      if (currentSettings.spotlights.length >= 4) {
+        addSpotlightBtn.disabled = true;
+        addSpotlightBtn.style.opacity = '0.5';
+      } else {
+        addSpotlightBtn.disabled = false;
+        addSpotlightBtn.style.opacity = '1.0';
+      }
+    }
+
+    currentSettings.spotlights.forEach((spotConfig, idx) => {
+      const card = document.createElement('div');
+      card.className = 'spotlight-card';
+      card.style.cssText = 'background: #252525; border: 1px solid #383838; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px;';
+
+      const lightNum = idx + 1;
+
+      card.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="spot-enable-${idx}" ${spotConfig.enabled ? 'checked' : ''}>
+            <label for="spot-enable-${idx}" style="font-weight: 600; font-size: 12px; margin: 0;">💡 Light #${lightNum}</label>
+          </div>
+          ${currentSettings.spotlights.length > 1 ? `<button id="spot-remove-${idx}" class="btn close" style="padding: 2px 6px; font-size: 10px; cursor: pointer; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171;">🗑️ Remove</button>` : ''}
+        </div>
+        
+        <div class="setting-item">
+          <label for="spot-h-${idx}"><span>${t('spotlight_angle_h')}</span>: <span id="val-spot-h-${idx}">${spotConfig.angleH}</span>°</label>
+          <input type="range" id="spot-h-${idx}" min="-180" max="180" step="1" value="${spotConfig.angleH}">
+        </div>
+        
+        <div class="setting-item">
+          <label for="spot-v-${idx}"><span>${t('spotlight_angle_v')}</span>: <span id="val-spot-v-${idx}">${spotConfig.angleV}</span>°</label>
+          <input type="range" id="spot-v-${idx}" min="0" max="90" step="1" value="${spotConfig.angleV}">
+        </div>
+        
+        <div class="setting-item">
+          <label for="spot-cone-${idx}"><span>${t('spotlight_cone')}</span>: <span id="val-spot-cone-${idx}">${spotConfig.cone}</span>°</label>
+          <input type="range" id="spot-cone-${idx}" min="10" max="80" step="1" value="${spotConfig.cone}">
+        </div>
+        
+        <div class="setting-item">
+          <label for="spot-int-${idx}"><span>${t('spotlight_intensity')}</span>: <span id="val-spot-int-${idx}">${parseFloat(spotConfig.intensity).toFixed(2)}</span>x</label>
+          <input type="range" id="spot-int-${idx}" min="0.0" max="5.0" step="0.1" value="${spotConfig.intensity}">
+        </div>
+        
+        <div class="setting-item">
+          <label for="spot-color-${idx}">${t('spotlight_color')}</label>
+          <select id="spot-color-${idx}">
+            <option value="#ffffff" ${spotConfig.color === '#ffffff' ? 'selected' : ''}>Pure White</option>
+            <option value="#ffb703" ${spotConfig.color === '#ffb703' ? 'selected' : ''}>Concert Warm Gold</option>
+            <option value="#00f0ff" ${spotConfig.color === '#00f0ff' ? 'selected' : ''}>Cyberpunk Neon Cyan</option>
+            <option value="#ff007f" ${spotConfig.color === '#ff007f' ? 'selected' : ''}>Stage Pink</option>
+            <option value="#ff0000" ${spotConfig.color === '#ff0000' ? 'selected' : ''}>Laser Red</option>
+          </select>
+        </div>
+      `;
+
+      container.appendChild(card);
+
+      // Event listeners
+      const enableCb = card.querySelector(`#spot-enable-${idx}`);
+      const hSlider = card.querySelector(`#spot-h-${idx}`);
+      const vSlider = card.querySelector(`#spot-v-${idx}`);
+      const coneSlider = card.querySelector(`#spot-cone-${idx}`);
+      const intSlider = card.querySelector(`#spot-int-${idx}`);
+      const colorSelect = card.querySelector(`#spot-color-${idx}`);
+      const removeBtn = card.querySelector(`#spot-remove-${idx}`);
+
+      if (enableCb) {
+        enableCb.addEventListener('change', () => {
+          spotConfig.enabled = enableCb.checked;
+          updateSpotlightPosition();
+        });
+      }
+      if (hSlider) {
+        hSlider.addEventListener('input', () => {
+          spotConfig.angleH = parseInt(hSlider.value, 10);
+          const valSpan = card.querySelector(`#val-spot-h-${idx}`);
+          if (valSpan) valSpan.innerText = hSlider.value;
+          updateSpotlightPosition();
+        });
+      }
+      if (vSlider) {
+        vSlider.addEventListener('input', () => {
+          spotConfig.angleV = parseInt(vSlider.value, 10);
+          const valSpan = card.querySelector(`#val-spot-v-${idx}`);
+          if (valSpan) valSpan.innerText = vSlider.value;
+          updateSpotlightPosition();
+        });
+      }
+      if (coneSlider) {
+        coneSlider.addEventListener('input', () => {
+          spotConfig.cone = parseInt(coneSlider.value, 10);
+          const valSpan = card.querySelector(`#val-spot-cone-${idx}`);
+          if (valSpan) valSpan.innerText = coneSlider.value;
+          updateSpotlightPosition();
+        });
+      }
+      if (intSlider) {
+        intSlider.addEventListener('input', () => {
+          spotConfig.intensity = parseFloat(intSlider.value);
+          const valSpan = card.querySelector(`#val-spot-int-${idx}`);
+          if (valSpan) valSpan.innerText = parseFloat(intSlider.value).toFixed(2);
+          updateSpotlightPosition();
+        });
+      }
+      if (colorSelect) {
+        colorSelect.addEventListener('change', () => {
+          spotConfig.color = colorSelect.value;
+          updateSpotlightPosition();
+        });
+      }
+      if (removeBtn) {
+        removeBtn.addEventListener('click', () => {
+          currentSettings.spotlights.splice(idx, 1);
+          renderSpotlightCardsUI();
+          updateSpotlightPosition();
+          saveSettingsFile();
+        });
+      }
+    });
+  };
+
+  if (addSpotlightBtn) {
+    addSpotlightBtn.addEventListener('click', () => {
+      if (!Array.isArray(currentSettings.spotlights)) currentSettings.spotlights = [];
+      if (currentSettings.spotlights.length >= 4) {
+        showSpeechBubble(t('max_spotlights_reached'), 2000);
+        return;
+      }
+
+      const nextNum = currentSettings.spotlights.length + 1;
+      const defaultColors = ['#ffffff', '#ffb703', '#00f0ff', '#ff007f'];
+      const nextColor = defaultColors[(nextNum - 1) % defaultColors.length];
+      const defaultAngles = [45, -135, -45, 135];
+      const nextAngleH = defaultAngles[(nextNum - 1) % defaultAngles.length];
+
+      currentSettings.spotlights.push({
+        id: nextNum,
+        enabled: true,
+        angleH: nextAngleH,
+        angleV: 55,
+        cone: 35,
+        intensity: 2.0,
+        color: nextColor
+      });
+
+      renderSpotlightCardsUI();
+      updateSpotlightPosition();
+      saveSettingsFile();
+    });
+  }
+
   const refreshPreviewsBtn = document.getElementById('refresh-previews-btn');
   if (refreshPreviewsBtn) {
     refreshPreviewsBtn.addEventListener('click', () => {
@@ -1849,14 +2248,45 @@ function setupSettingsUI() {
     });
   }
 
-  // Make gear and close buttons visible
+  // Make gear and close buttons visible & add hover listeners for transparent cross-over behavior
   gearBtn.style.display = 'flex';
+  gearBtn.addEventListener('mouseenter', () => {
+    isMouseOverUI = true;
+    updateIgnoreMouseState();
+  });
+  gearBtn.addEventListener('mouseleave', () => {
+    isMouseOverUI = false;
+    updateIgnoreMouseState();
+  });
+
   const closeBtn = document.getElementById('app-close-btn');
   if (closeBtn) {
     closeBtn.style.display = 'flex';
+    closeBtn.addEventListener('mouseenter', () => {
+      isMouseOverUI = true;
+      updateIgnoreMouseState();
+    });
+    closeBtn.addEventListener('mouseleave', () => {
+      isMouseOverUI = false;
+      updateIgnoreMouseState();
+    });
     closeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       ipcRenderer.send('close-app');
+    });
+  }
+
+  const settingsHeader = document.getElementById('settings-header');
+  if (settingsHeader) {
+    settingsHeader.addEventListener('mousedown', (e) => {
+      if (e.button !== 0 || currentSettings.lockPosition) return;
+      isDragging = true;
+      dragStartScreenX = e.screenX;
+      dragStartScreenY = e.screenY;
+      dragMoveDistance = 0;
+      settingsHeader.style.cursor = 'grabbing';
+      document.body.style.cursor = 'grabbing';
+      updateIgnoreMouseState();
     });
   }
 
@@ -1867,19 +2297,19 @@ function setupSettingsUI() {
   const populateAnimationDropdown = () => {
     const container = document.getElementById('anim-select-container');
     if (!animSelect) return;
-    
+
     if (modelSelect.value === 'procedural') {
       animSelect.innerHTML = '<option value="none">Procedural (Default Loop)</option>';
       animSelect.disabled = true;
       if (container) container.style.opacity = '0.5';
       return;
     }
-    
+
     animSelect.disabled = false;
     if (container) container.style.opacity = '1.0';
-    
+
     animSelect.innerHTML = '<option value="none">None (Static Pose)</option>';
-    
+
     availableAnimations.forEach((clipName, idx) => {
       const option = document.createElement('option');
       const val = clipName || String(idx);
@@ -1887,7 +2317,7 @@ function setupSettingsUI() {
       option.textContent = clipName ? `${idx + 1}. ${clipName}` : `Animation ${idx + 1}`;
       animSelect.appendChild(option);
     });
-    
+
     if (currentSettings.activeAnimation === 'default') {
       if (availableAnimations.length > 0) {
         animSelect.value = availableAnimations[0] || '0';
@@ -1915,7 +2345,7 @@ function setupSettingsUI() {
     heightSlider.value = currentSettings.height;
     scaleSlider.value = currentSettings.scale;
     bobbingCheck.checked = currentSettings.bobbing;
-    
+
     spinXCheck.checked = currentSettings.spinX;
     spinYCheck.checked = currentSettings.spinY;
     spinZCheck.checked = currentSettings.spinZ;
@@ -1923,7 +2353,7 @@ function setupSettingsUI() {
     speedXSlider.value = currentSettings.speedX;
     speedYSlider.value = currentSettings.speedY;
     speedZSlider.value = currentSettings.speedZ;
-    
+
     gpuOptimizeCheck.checked = currentSettings.gpuOptimize;
     mouseOptimizeCheck.checked = currentSettings.mouseOptimize;
     settingsLeftCheck.checked = currentSettings.settingsLeft;
@@ -1949,7 +2379,7 @@ function setupSettingsUI() {
     valWidth.innerText = currentSettings.width;
     valHeight.innerText = currentSettings.height;
     valScale.innerText = currentSettings.scale.toFixed(2);
-    
+
     valSpeedX.innerText = currentSettings.speedX.toFixed(1);
     valSpeedY.innerText = currentSettings.speedY.toFixed(1);
     valSpeedZ.innerText = currentSettings.speedZ.toFixed(1);
@@ -1968,6 +2398,15 @@ function setupSettingsUI() {
     if (panel) {
       panel.style.setProperty('--panel-font-scale', currentSettings.fontSizeScale);
     }
+
+    renderSpotlightCardsUI();
+
+    if (enableStudioLightsCheck) enableStudioLightsCheck.checked = currentSettings.enableStudioLights !== false;
+    if (ambientIntensitySlider) ambientIntensitySlider.value = currentSettings.ambientIntensity ?? 0.70;
+    if (valAmbientIntensity && ambientIntensitySlider) valAmbientIntensity.innerText = parseFloat(ambientIntensitySlider.value).toFixed(2);
+
+    updateStageLighting();
+    updateSpotlightPosition();
   };
 
   syncSlidersUI();
@@ -2002,7 +2441,7 @@ function setupSettingsUI() {
   speedZSlider.addEventListener('input', () => {
     valSpeedZ.innerText = parseFloat(speedZSlider.value).toFixed(1);
   });
-  
+
   if (physicsGravitySlider && valPhysicsGravity) {
     physicsGravitySlider.addEventListener('input', () => {
       valPhysicsGravity.innerText = parseFloat(physicsGravitySlider.value).toFixed(1);
@@ -2013,7 +2452,50 @@ function setupSettingsUI() {
       valPhysicsElasticity.innerText = parseFloat(physicsElasticitySlider.value).toFixed(2);
     });
   }
-  
+
+  if (enableStudioLightsCheck) {
+    enableStudioLightsCheck.addEventListener('change', () => {
+      currentSettings.enableStudioLights = enableStudioLightsCheck.checked;
+      updateStageLighting();
+    });
+  }
+  if (ambientIntensitySlider && valAmbientIntensity) {
+    ambientIntensitySlider.addEventListener('input', () => {
+      currentSettings.ambientIntensity = parseFloat(ambientIntensitySlider.value);
+      valAmbientIntensity.innerText = parseFloat(ambientIntensitySlider.value).toFixed(2);
+      updateStageLighting();
+    });
+  }
+  if (btnDarkStage) {
+    btnDarkStage.addEventListener('click', () => {
+      currentSettings.enableStudioLights = true;
+      currentSettings.ambientIntensity = 0.05;
+      if (!Array.isArray(currentSettings.spotlights) || currentSettings.spotlights.length === 0) {
+        currentSettings.spotlights = [
+          { id: 1, enabled: true, angleH: 45, angleV: 60, cone: 35, intensity: 2.5, color: '#ffffff' }
+        ];
+      } else {
+        currentSettings.spotlights.forEach(s => s.enabled = true);
+      }
+      syncSlidersUI();
+      saveSettingsFile();
+      showSpeechBubble("🎭 Dark Stage Mode Activated!", 2000);
+    });
+  }
+  if (btnDualConcert) {
+    btnDualConcert.addEventListener('click', () => {
+      currentSettings.enableStudioLights = true;
+      currentSettings.ambientIntensity = 0.10;
+      currentSettings.spotlights = [
+        { id: 1, enabled: true, angleH: 45, angleV: 55, cone: 35, intensity: 2.5, color: '#ffb703' },
+        { id: 2, enabled: true, angleH: -135, angleV: 45, cone: 30, intensity: 2.2, color: '#00f0ff' }
+      ];
+      syncSlidersUI();
+      saveSettingsFile();
+      showSpeechBubble("🎸 Concert Dual Spotlight Activated!", 2200);
+    });
+  }
+
   if (fontScaleSlider) {
     fontScaleSlider.addEventListener('input', () => {
       const scale = parseFloat(fontScaleSlider.value);
@@ -2045,14 +2527,18 @@ function setupSettingsUI() {
   const closeSettings = () => {
     isSettingsOpen = false;
     panel.classList.add('hidden');
+    updateSpotlightPosition();
     ipcRenderer.send('set-ignore-mouse', true);
   };
 
-  // Revert back to original saved settings if closed without saving
-  document.getElementById('close-btn').addEventListener('click', () => {
-    syncSlidersUI();
-    closeSettings();
-  });
+  // Revert back to original saved settings if closed without saving (if close-btn exists)
+  const panelCloseBtn = document.getElementById('close-btn');
+  if (panelCloseBtn) {
+    panelCloseBtn.addEventListener('click', () => {
+      syncSlidersUI();
+      closeSettings();
+    });
+  }
 
   // Apply changes only when user clicks "Save Settings"
   document.getElementById('save-btn').addEventListener('click', async () => {
@@ -2062,19 +2548,25 @@ function setupSettingsUI() {
       await changeLanguage(currentSettings.language);
     }
 
+    if (enableStudioLightsCheck) currentSettings.enableStudioLights = enableStudioLightsCheck.checked;
+    if (ambientIntensitySlider) currentSettings.ambientIntensity = parseFloat(ambientIntensitySlider.value);
+
+    updateStageLighting();
+    updateSpotlightPosition();
+
     currentSettings.width = parseInt(widthSlider.value, 10);
     currentSettings.height = parseInt(heightSlider.value, 10);
     currentSettings.scale = parseFloat(scaleSlider.value);
     currentSettings.bobbing = bobbingCheck.checked;
-    
+
     currentSettings.spinX = spinXCheck.checked;
     currentSettings.spinY = spinYCheck.checked;
     currentSettings.spinZ = spinZCheck.checked;
-    
+
     currentSettings.speedX = parseFloat(speedXSlider.value);
     currentSettings.speedY = parseFloat(speedYSlider.value);
     currentSettings.speedZ = parseFloat(speedZSlider.value);
-    
+
     currentSettings.gpuOptimize = gpuOptimizeCheck.checked;
     currentSettings.mouseOptimize = mouseOptimizeCheck.checked;
     currentSettings.settingsLeft = settingsLeftCheck.checked;
@@ -2147,7 +2639,7 @@ function setupSettingsUI() {
         scene.remove(characterGroup);
       }
       customModelLoaded = false;
-      
+
       if (newModel === 'procedural') {
         fallbackToProcedural();
       } else {
@@ -2171,7 +2663,7 @@ function setupSettingsUI() {
     // 4. Update character scale
     if (characterGroup) {
       characterGroup.scale.set(currentSettings.scale, currentSettings.scale, currentSettings.scale);
-      
+
       // Update camera distance Z for custom models so they still fit nicely in the resized window
       if (customModelLoaded) {
         // Query the loaded model's size
@@ -2179,7 +2671,7 @@ function setupSettingsUI() {
         if (innerModel) {
           const box = new THREE.Box3().setFromObject(innerModel);
           const size = box.getSize(new THREE.Vector3());
-          
+
           const padding = 1.35;
           const visibleHeight = size.y * currentSettings.scale * padding;
           const zPos = visibleHeight / (2 * Math.tan((camera.fov * Math.PI) / 360));
@@ -2472,7 +2964,7 @@ function updateFPSCamera(delta) {
 function updateXYZVisibility() {
   if (axesHelper) axesHelper.visible = !!currentSettings.showXYZCoords;
   if (gridHelper) gridHelper.visible = !!currentSettings.showGroundGrid;
-  
+
   const hud = document.getElementById('xyz-hud-overlay');
   if (hud) {
     if (currentSettings.showXYZCoords) {
@@ -2499,7 +2991,7 @@ function updateXYZVisibility() {
       if (document.pointerLockElement) {
         try {
           document.exitPointerLock();
-        } catch (e) {}
+        } catch (e) { }
       }
       if (!isMouseOverCharacter) {
         document.body.style.cursor = 'default';
