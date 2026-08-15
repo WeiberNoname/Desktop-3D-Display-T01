@@ -141,11 +141,14 @@ canvas {
 }
 
 .studio-tab-nav-arrow {
-  flex-shrink: 0;
-  width: 24px;
-  height: 28px;
-  padding: 0;
-  display: flex;
+  flex: 0 0 24px !important;
+  width: 24px !important;
+  min-width: 24px !important;
+  max-width: 28px !important;
+  height: 28px !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  display: flex !important;
   align-items: center;
   justify-content: center;
   background: #222222;
