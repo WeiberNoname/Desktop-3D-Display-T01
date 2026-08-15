@@ -1,88 +1,94 @@
-# 31 Languages Localization Architecture & Completion Plan (Plan 001)
+# Plan 001: Settings Panel 31-Language Localization Failure Analysis & Completion Strategy
 
-Comprehensive technical plan for achieving **100% native multi-language localization** across all 31 supported international languages for every tab, header, label, control card, slider, button, and help text in the Studio Settings Control Suite.
+## Problem Statement & Root Cause Analysis
+
+While basic mascot and window settings in the Settings Panel translate correctly across languages, newer features (such as Physics Engine controls, Multi-Source Stage Spotlights, First-Person Camera Perspective, Viewport Controls, Spatial XYZ HUD, and Tab Scroll Arrows) exhibit partial or complete translation failure (displaying raw English keys or unrendered text).
+
+Through technical audit of `i18nManager.js`, `scratch_create_locales.js`, `index.html`, `renderer.js`, and `locales/`, five primary root causes were identified:
+
+### 1. Key Disparity & Feature Evolution (Temporal Desynchronization)
+- **Root Cause**: Features like Physics Engine, Spotlight Sources, FPS Flight Controls, Viewport Controls, and Spatial HUD were built in later development iterations.
+- **Impact**: When third-party locale files (`locales/<lang>/translation.json`) were originally generated, they only contained 15–20 original keys (`active_mascot`, `win_width`, etc.). The ~35 newly added keys (`physics_section`, `spotlight_section`, `fps_mode_section`, `tab_display`, `tab_motion`, etc.) were missing from non-English locale dictionaries, causing fallback failures.
+
+### 2. Missing `data-i18n` Annotations in Recently Added HTML Elements
+- **Root Cause**: Later UI additions in [index.html](file:///c:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T01%20V1/index.html) (e.g. Tab Navigation left/right scroll arrows `#tab-nav-left` and `#tab-nav-right`, spotlight dropdown options, and drag header hints) lacked `data-i18n` or `data-i18n-title` attributes.
+- **Impact**: `updateDOMTranslations()` scans `document.querySelectorAll('[data-i18n]')` and skips unannotated elements, leaving them permanently in hardcoded English.
+
+### 3. Dynamic JavaScript Component Re-rendering Gaps
+- **Root Cause**: Spotlight control cards, animation dropdown options, and mascot grid cards are dynamically created in [renderer.js](file:///c:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T01%20V1/renderer.js) using template strings (`Spotlight Light #${id}`, `Remove Spotlight`).
+- **Impact**: When a user changes language in the System tab, `updateDOMTranslations()` updates static DOM nodes, but dynamically appended JS components are not re-rendered with `t(key)` calls or re-bound to locale change events.
+
+### 4. Flawed Fallback Merge in Locale Dictionaries
+- **Root Cause**: In [i18nManager.js](file:///c:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T01%20V1/i18nManager.js), `i18next` fallback (`fallbackLng: 'en'`) only triggers if a key is completely absent. If a translation file contained empty strings (`""`) or missing sub-keys, `i18next` rendered blank labels or unformatted key strings.
+
+### 5. Layout Clipping & Text Overflow
+- **Root Cause**: Long translated text in German, French, or Russian (e.g. *Bühnen-Spotlichtsteuerung* for *Stage Spotlight Control*) clips within fixed-width container cards.
 
 ---
 
-## 🎯 Plan Objectives & Core Architecture
+## User Review Required
 
-1. **100% International Key Coverage**:
-   - Guarantee native translation for all 85 UI elements across all 6 Studio Tabs (`Display & Model`, `Motion & Spin`, `Stage Lighting`, `Physics Engine`, `Camera & Spatial`, `System & Locales`).
-2. **Supported 31 International Locales**:
-   - `en`, `zh-CN`, `zh-TW`, `ja`, `ko`, `es`, `fr`, `de`, `it`, `pt-BR`, `ru`, `tr`, `vi`, `pl`, `ar`, `bg`, `cs`, `da`, `nl`, `fi`, `el`, `hu`, `id`, `ms`, `no`, `pt-PT`, `ro`, `es-419`, `sv`, `th`, `uk`.
-3. **Zero-Restart Live UI Translation**:
-   - Selecting any language in the System Tab dropdown instantly re-translates all 6 studio tab headers, spotlight control cards, slider labels, and diagnostic buttons in real-time (0ms delay) without requiring an app restart or reload.
-4. **Guaranteed Master Fallback Merge**:
-   - Fallback merging algorithm (`Object.assign({}, newTranslations["en"], newTranslations[code])`) ensures no missing translation keys or raw string fallbacks.
+> [!IMPORTANT]
+> - **100% Key Parity**: All 31 supported locale JSON files will be updated via automated fallback merge script (`scratch_create_locales.js`) to guarantee that all 85+ keys exist in every language.
+> - **Dynamic Component Re-translation**: Dynamic JS elements (spotlight cards, dropdowns) will be bound to live locale change listeners for instant, zero-restart re-rendering.
 
 ---
 
-## 🛠️ Proposed Technical Implementation
+## Open Questions
+None. The root causes are identified and the solution strategy is fully bounded.
 
-### 1. Master Template & Automated Dictionary Generator
+---
+
+## Proposed Technical Changes
+
+### 1. Dictionary Parity & Fallback Merge Automation
 
 #### [MODIFY] [scratch_create_locales.js](file:///c:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T01%20V1/scratch_create_locales.js)
-- Maintain master 85-key English template (`newTranslations["en"]`) containing all UI strings:
-  - Studio Tab Labels (`tab_display`, `tab_motion`, `tab_lighting`, `tab_physics`, `tab_camera`, `tab_system`)
-  - Stage Spotlight & Ambient Controls (`spotlight_section`, `enable_spotlight`, `spotlight_angle_h`, `spotlight_angle_v`, `spotlight_cone`, `spotlight_intensity`, `spotlight_color`, `dark_stage_preset`, `add_spotlight`, `remove_spotlight`, `spotlight_num`, `dual_concert_preset`)
-  - Physics Engine Controls (`physics_section`, `enable_physics`, `physics_hint_title`, `physics_hint_body`, `physics_floor`, `physics_gravity`, `physics_elasticity`)
-  - First-Person Camera Flight & Spatial Coordinates (`fps_mode_section`, `enable_fps_mode`, `fps_sub`, `fps_hint_title`, `fps_hint_body`, `reset_camera`, `show_xyz_coords`, `show_xyz_sub`, `show_ground_grid`, `xyz_hud_title`)
-  - Blender Viewport Controls (`viewport_controls`, `orbit`, `orbit_sub`, `pan`, `pan_sub`, `zoom`, `zoom_sub`, `ortho`, `ortho_sub`, `reset_view`, `reset_view_sub`)
-- Implement fallback merge loop iterating over all 31 locale codes:
+- Maintain a complete master 85+ key English template (`newTranslations["en"]`).
+- Implement an automated fallback merge loop across all 31 supported locales:
   ```javascript
-  const merged = Object.assign({}, newTranslations["en"], newTranslations[code] || {});
-  fs.writeFileSync(filePath, JSON.stringify(merged, null, 2) + '\n', 'utf8');
-  ```
-
----
-
-### 2. HTML DOM i18n Binding
-
-#### [MODIFY] [index.html](file:///c:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T01%20V1/index.html)
-- Annotate all HTML tags across all 6 tabs with `data-i18n="key_name"` attributes:
-  - Studio tab buttons: `<button class="studio-tab-btn" data-i18n="tab_display">🎯 Display & Model</button>`
-  - Checkbox labels, range titles, shortcut notes, section headers, and action buttons.
-
----
-
-### 3. Dynamic Live Language Switching Engine
-
-#### [MODIFY] [renderer.js](file:///c:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T01%20V1/renderer.js)
-- Attach live `change` event listener to `#lang-select`:
-  ```javascript
-  if (langSelect) {
-    langSelect.addEventListener('change', async () => {
-      currentSettings.language = langSelect.value;
-      await changeLanguage(langSelect.value); // Triggers updateDOMTranslations()
-      saveSettingsFile();
-    });
+  const masterEN = newTranslations["en"];
+  for (const code of Object.keys(newTranslations)) {
+    const merged = Object.assign({}, masterEN, newTranslations[code] || {});
+    // Write out normalized translation.json for each locale
   }
   ```
-- Re-render dynamic components (such as spotlight cards) with `t('spotlight_num')` and `t('remove_spotlight')` on locale change.
+- Run `node scratch_create_locales.js` to build all 31 `locales/<lang>/translation.json` files with 100% key coverage.
 
 ---
 
-### 4. International Typography & Layout Fallbacks
+### 2. Complete HTML DOM i18n Annotations
+
+#### [MODIFY] [index.html](file:///c:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T01%20V1/index.html)
+- Annotate all un-translated tags across all 6 tabs with `data-i18n` and `data-i18n-title`:
+  - Tab navigation arrow buttons: `<button id="tab-nav-left" class="btn studio-tab-nav-arrow" data-i18n-title="nav_prev_tab">◀</button>`
+  - Section titles, slider labels, shortcut descriptions, and action buttons.
+
+---
+
+### 3. Dynamic JS Component Re-translation Engine
+
+#### [MODIFY] [renderer.js](file:///c:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T01%20V1/renderer.js)
+- Update dynamic card rendering (e.g., `renderSpotlightCards()`) to use `t('spotlight_num')` and `t('remove_spotlight')`.
+- Register locale change callbacks to trigger `renderSpotlightCards()` and dynamic component updates live when language dropdown changes.
+
+---
+
+### 4. Dynamic Typography & Layout Scaling
 
 #### [MODIFY] [style.css](file:///c:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T01%20V1/style.css)
-- Implement global font stack with CJK and RTL typography fallbacks:
-  ```css
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-               'PingFang SC', 'Hiragino Sans', 'Meiryo', 'Malgun Gothic',
-               'Noto Sans CJK', sans-serif;
-  ```
-- Enforce strict arrow button max-width limits (`flex: 0 0 24px !important`, `max-width: 32px !important`) to ensure compact tab layout across long translated tab titles.
+- Add CSS font stacks for CJK (Japanese, Chinese, Korean) and RTL (Arabic) fonts.
+- Add `hyphens: auto; word-break: break-word;` to setting card labels to handle longer European translated words gracefully.
 
 ---
 
-## 🧪 Verification & Validation Plan
+## Verification & Quality Plan
 
 ### Automated Verification
-1. Run `node scratch_create_locales.js` to build all 31 language files under `locales/`.
-2. Validate JSON structure of generated `locales/<code kiến>/translation.json` files to ensure 100% 85-key parity.
+1. Run `node scratch_create_locales.js` to build all 31 locale files under `locales/`.
+2. Run automated validation script to verify that every `locales/<lang>/translation.json` contains 100% of master English keys with zero missing keys.
 
 ### Manual Verification
-1. Launch app via `npm start` or compiled executable [DesktopPet.exe](file:///C:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T01%20V1/DesktopPet-win32-x64/DesktopPet.exe).
-2. Open Settings Panel (`⚙️`) ➔ Navigate to **System Tab** ➔ Change language selector across various locales (`French`, `Japanese`, `German`, `Spanish`, `Simplified Chinese`, `Korean`, `Russian`, `Thai`, `Arabic`).
-3. Confirm all 6 studio tab titles, section headers, range sliders, spotlight cards, and diagnostic buttons re-translate live in real-time.
-4. Recompile production package using `cmd.exe /c "npm run build"`.
+1. Launch app (`npm start` / `DesktopPet.exe`).
+2. Open Settings Panel ➔ System Tab ➔ Change language dropdown across `German`, `Japanese`, `French`, `Spanish`, `Simplified Chinese`, `Russian`, `Arabic`, `Korean`, `Thai`.
+3. Confirm all 6 studio tab headers, spotlight control cards, slider labels, shortcut hints, and diagnostic buttons re-translate live without restart.

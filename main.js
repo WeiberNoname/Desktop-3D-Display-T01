@@ -2,139 +2,49 @@ const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
-// Helper to determine path to assets folder
+const Logger = require('./src/main/Logger.js');
+const SteamService = require('./src/main/SteamService.js');
+
 function getAssetsPath() {
-  if (app.isPackaged) {
-    return path.join(path.dirname(process.execPath), 'assets');
-  }
-  return path.join(app.getAppPath(), 'assets');
+  return Logger.getAssetsPath();
 }
 
-// Global logger for writing traces to assets/diagnostics.log
 function logDiagnostic(message) {
-  const timestamp = new Date().toISOString();
-  const logLine = `[${timestamp}] ${message}\n`;
-  console.log(`[Diagnostic] ${message}`);
-  try {
-    const assetsDir = getAssetsPath();
-    if (!fs.existsSync(assetsDir)) {
-      fs.mkdirSync(assetsDir, { recursive: true });
-    }
-    const diagnosticsLogPath = path.join(assetsDir, 'diagnostics.log');
-    
-    // Check file size and truncate if larger than 100KB to keep it constrained
-    if (fs.existsSync(diagnosticsLogPath)) {
-      const stats = fs.statSync(diagnosticsLogPath);
-      if (stats.size > 100 * 1024) {
-        const data = fs.readFileSync(diagnosticsLogPath, 'utf8');
-        const lines = data.split('\n');
-        const truncatedData = lines.slice(-100).join('\n') + '\n';
-        fs.writeFileSync(diagnosticsLogPath, truncatedData, 'utf8');
-      }
-    }
-    
-    fs.appendFileSync(diagnosticsLogPath, logLine);
-  } catch (e) {
-    console.error("Failed to write to diagnostics.log:", e);
-  }
+  Logger.logDiagnostic(message);
 }
 
-// Log application start
 logDiagnostic('=== Application Session Started ===');
 
 const isDevMode = process.argv.includes('--dev');
 logDiagnostic(`Developer Mode active: ${isDevMode}`);
 
-
-class MockSteamClient {
-  constructor() {
-    this.isInitialized = true;
-    this.isMock = true;
-    this.friends = {
-      getPersonaName: () => "Guest Pet Owner 🐰"
-    };
-    this.userStats = {
-      resetAllStats: (achievementsToo) => {
-        console.log(`[Mock Steam] All stats and achievements reset on mock client (achievementsToo: ${achievementsToo})`);
-        return true;
-      },
-      storeStats: () => {
-        console.log(`[Mock Steam] Stats stored.`);
-        return true;
-      }
-    };
-  }
-  on(event, callback) {
-    console.log(`[Mock Steam] Event listener registered for ${event}`);
-  }
-  shutdown() {
-    console.log(`[Mock Steam] Shutdown mock client.`);
-  }
-}
-
 let isSteamOverlayActive = false;
-let steamClient = null;
 let edgeCheckInterval = null;
-logDiagnostic('Loading Steamworks module @skyatnpm/steamworks-js...');
-try {
-  const { SteamClient } = require('@skyatnpm/steamworks-js');
-  logDiagnostic('Steamworks module loaded successfully. Initializing against App ID 480...');
-  const realClient = new SteamClient();
-  realClient.init(480).then((success) => {
-    if (success) {
-      steamClient = realClient;
-      logDiagnostic(`Steamworks API initialized successfully. Active user: ${steamClient.friends.getPersonaName()}`);
+const steamService = new SteamService();
 
-      // Auto-reset test stats on developer startup (clears AppID 480 cloud test stats)
-      if (steamClient.userStats && typeof steamClient.userStats.resetAllStats === 'function') {
-        try {
-          steamClient.userStats.resetAllStats(true);
-          if (typeof steamClient.userStats.storeStats === 'function') {
-            steamClient.userStats.storeStats();
-          }
-          logDiagnostic('[Steam Startup] Force-wiped AppID 480 testing stats on Steam Cloud.');
-        } catch (e) {
-          logDiagnostic(`[Steam Startup] Cloud stats reset skipped: ${e.message || e}`);
-        }
+steamService.initialize((active) => {
+  isSteamOverlayActive = active;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (active) {
+      if (edgeCheckInterval) {
+        clearInterval(edgeCheckInterval);
+        edgeCheckInterval = null;
       }
-      
-      // Register gameOverlayActivated event listener
-      steamClient.on('gameOverlayActivated', (active) => {
-        logDiagnostic(`[Steam Event] Overlay activated state changed to: ${active}`);
-        isSteamOverlayActive = active;
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          if (active) {
-            // Immediately stop background boundary polling timer to avoid overriding overlay focus
-            if (edgeCheckInterval) {
-              clearInterval(edgeCheckInterval);
-              edgeCheckInterval = null;
-            }
-            // Temporarily disable topmost lock so Steam Overlay (GameOverlayUI.exe) can capture input
-            mainWindow.setAlwaysOnTop(false);
-            mainWindow.setIgnoreMouseEvents(false);
-            mainWindow.focus();
-            mainWindow.setFullScreen(true);
-            mainWindow.webContents.send('steam-overlay-active', true);
-          } else {
-            mainWindow.setFullScreen(false);
-            mainWindow.setAlwaysOnTop(true);
-            mainWindow.setIgnoreMouseEvents(true, { forward: true });
-            mainWindow.webContents.send('steam-overlay-active', false);
-          }
-        }
-      });
+      mainWindow.setAlwaysOnTop(false);
+      mainWindow.setIgnoreMouseEvents(false);
+      mainWindow.focus();
+      mainWindow.setFullScreen(true);
+      mainWindow.webContents.send('steam-overlay-active', true);
     } else {
-      logDiagnostic('Steamworks API initialization failed: init(480) returned false. Falling back to Mock Client.');
-      steamClient = new MockSteamClient();
+      mainWindow.setFullScreen(false);
+      mainWindow.setAlwaysOnTop(true);
+      mainWindow.setIgnoreMouseEvents(true, { forward: true });
+      mainWindow.webContents.send('steam-overlay-active', false);
     }
-  }).catch((err) => {
-    logDiagnostic(`Steamworks API initialization rejected: ${err.message || err}. Falling back to Mock Client.`);
-    steamClient = new MockSteamClient();
-  });
-} catch (err) {
-  logDiagnostic(`Failed to load Steamworks native binary or module: ${err.message || err}. Falling back to Mock Client.`);
-  steamClient = new MockSteamClient();
-}
+  }
+});
+
+let steamClient = steamService.getClient();
 
 let mainWindow;
 
