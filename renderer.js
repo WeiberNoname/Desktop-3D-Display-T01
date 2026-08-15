@@ -218,6 +218,9 @@ async function init() {
     updateGearPosition();
   }
 
+  // 6.6. Initialize 3D Asset & Stage Lighting Preview Viewport Engine
+  initPreviewViewport();
+
   // 6.7. Start background generator for missing previews
   startBackgroundPreviewGenerator();
 
@@ -2075,6 +2078,28 @@ function setupSettingsUI() {
     });
   }
 
+  function hexToRgb(hex) {
+    if (typeof hex !== 'string') hex = '#ffffff';
+    let c = hex.replace('#', '').trim();
+    if (c.length === 3) c = c.split('').map(x => x + x).join('');
+    if (!/^[0-9A-Fa-f]{6}$/.test(c)) return { r: 255, g: 255, b: 255 };
+    const num = parseInt(c, 16);
+    if (isNaN(num)) return { r: 255, g: 255, b: 255 };
+    return {
+      r: (num >> 16) & 255,
+      g: (num >> 8) & 255,
+      b: num & 255
+    };
+  }
+
+  function rgbToHex(r, g, b) {
+    const toHex = (n) => {
+      const hex = Math.max(0, Math.min(255, Math.round(Number(n) || 0))).toString(16);
+      return hex.length === 1 ? '0' + hex : hex;
+    };
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  }
+
   const renderSpotlightCardsUI = () => {
     const container = document.getElementById('spotlight-cards-container');
     if (!container) return;
@@ -2133,15 +2158,40 @@ function setupSettingsUI() {
           <input type="range" id="spot-int-${idx}" min="0.0" max="5.0" step="0.1" value="${spotConfig.intensity}">
         </div>
         
-        <div class="setting-item">
-          <label for="spot-color-${idx}">${t('spotlight_color')}</label>
-          <select id="spot-color-${idx}">
-            <option value="#ffffff" ${spotConfig.color === '#ffffff' ? 'selected' : ''}>Pure White</option>
-            <option value="#ffb703" ${spotConfig.color === '#ffb703' ? 'selected' : ''}>Concert Warm Gold</option>
-            <option value="#00f0ff" ${spotConfig.color === '#00f0ff' ? 'selected' : ''}>Cyberpunk Neon Cyan</option>
-            <option value="#ff007f" ${spotConfig.color === '#ff007f' ? 'selected' : ''}>Stage Pink</option>
-            <option value="#ff0000" ${spotConfig.color === '#ff0000' ? 'selected' : ''}>Laser Red</option>
-          </select>
+        <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 4px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label style="margin: 0; font-weight: 600; font-size: 11px;">${t('spotlight_color') || 'Spotlight Color'}</label>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <input type="color" id="spot-color-picker-${idx}" value="${spotConfig.color || '#ffffff'}" style="width: 26px; height: 22px; padding: 0; border: 1px solid #555; border-radius: 4px; cursor: pointer; background: none;">
+              <input type="text" id="spot-hex-text-${idx}" value="${(spotConfig.color || '#ffffff').toUpperCase()}" maxlength="7" style="width: 65px; font-family: monospace; font-size: 11px; padding: 2px 4px; text-transform: uppercase; background: #1a1a1a; border: 1px solid #444; color: #f39c12; border-radius: 3px; text-align: center;">
+            </div>
+          </div>
+          <div style="display: flex; gap: 4px; margin-top: 2px;">
+            <div style="flex: 1; display: flex; align-items: center; gap: 2px; background: rgba(239, 68, 68, 0.15); padding: 2px 4px; border-radius: 3px; border: 1px solid rgba(239, 68, 68, 0.3);">
+              <span style="font-size: 10px; font-weight: bold; color: #f87171;">R</span>
+              <input type="number" id="spot-rgb-r-${idx}" min="0" max="255" value="${hexToRgb(spotConfig.color || '#ffffff').r}" style="width: 100%; font-size: 10px; padding: 1px 2px; background: rgba(0,0,0,0.5); border: 1px solid rgba(239,68,68,0.4); color: #fff; border-radius: 2px; font-family: monospace;">
+            </div>
+            <div style="flex: 1; display: flex; align-items: center; gap: 2px; background: rgba(34, 197, 94, 0.15); padding: 2px 4px; border-radius: 3px; border: 1px solid rgba(34, 197, 94, 0.3);">
+              <span style="font-size: 10px; font-weight: bold; color: #4ade80;">G</span>
+              <input type="number" id="spot-rgb-g-${idx}" min="0" max="255" value="${hexToRgb(spotConfig.color || '#ffffff').g}" style="width: 100%; font-size: 10px; padding: 1px 2px; background: rgba(0,0,0,0.5); border: 1px solid rgba(34,197,94,0.4); color: #fff; border-radius: 2px; font-family: monospace;">
+            </div>
+            <div style="flex: 1; display: flex; align-items: center; gap: 2px; background: rgba(59, 130, 246, 0.15); padding: 2px 4px; border-radius: 3px; border: 1px solid rgba(59, 130, 246, 0.3);">
+              <span style="font-size: 10px; font-weight: bold; color: #60a5fa;">B</span>
+              <input type="number" id="spot-rgb-b-${idx}" min="0" max="255" value="${hexToRgb(spotConfig.color || '#ffffff').b}" style="width: 100%; font-size: 10px; padding: 1px 2px; background: rgba(0,0,0,0.5); border: 1px solid rgba(59,130,246,0.4); color: #fff; border-radius: 2px; font-family: monospace;">
+            </div>
+          </div>
+          <div style="margin-top: 3px;">
+            <select id="spot-color-${idx}" style="width: 100%; font-size: 10px; padding: 2px 4px; background: #1a1a1a; border: 1px solid #3d3d3d; color: #bbb; border-radius: 3px;">
+              <option value="" disabled selected>-- Quick Presets --</option>
+              <option value="#ffffff">Pure White (255, 255, 255)</option>
+              <option value="#ffb703">Concert Warm Gold (255, 183, 3)</option>
+              <option value="#00f0ff">Cyberpunk Neon Cyan (0, 240, 255)</option>
+              <option value="#ff007f">Stage Pink (255, 0, 127)</option>
+              <option value="#ff0000">Laser Red (255, 0, 0)</option>
+              <option value="#a855f7">Vibrant Purple (168, 85, 247)</option>
+              <option value="#22c55e">Emerald Stage Green (34, 197, 94)</option>
+            </select>
+          </div>
         </div>
       `;
 
@@ -2153,6 +2203,11 @@ function setupSettingsUI() {
       const vSlider = card.querySelector(`#spot-v-${idx}`);
       const coneSlider = card.querySelector(`#spot-cone-${idx}`);
       const intSlider = card.querySelector(`#spot-int-${idx}`);
+      const colorPicker = card.querySelector(`#spot-color-picker-${idx}`);
+      const hexText = card.querySelector(`#spot-hex-text-${idx}`);
+      const inputR = card.querySelector(`#spot-rgb-r-${idx}`);
+      const inputG = card.querySelector(`#spot-rgb-g-${idx}`);
+      const inputB = card.querySelector(`#spot-rgb-b-${idx}`);
       const colorSelect = card.querySelector(`#spot-color-${idx}`);
       const removeBtn = card.querySelector(`#spot-remove-${idx}`);
 
@@ -2194,12 +2249,54 @@ function setupSettingsUI() {
           updateSpotlightPosition();
         });
       }
-      if (colorSelect) {
-        colorSelect.addEventListener('change', () => {
-          spotConfig.color = colorSelect.value;
-          updateSpotlightPosition();
+
+      const updateAllColorUI = (newHex) => {
+        spotConfig.color = newHex;
+        const rgbVals = hexToRgb(newHex);
+        if (colorPicker && colorPicker.value !== newHex) colorPicker.value = newHex;
+        if (hexText && hexText.value !== newHex.toUpperCase()) hexText.value = newHex.toUpperCase();
+        if (inputR && parseInt(inputR.value, 10) !== rgbVals.r) inputR.value = rgbVals.r;
+        if (inputG && parseInt(inputG.value, 10) !== rgbVals.g) inputG.value = rgbVals.g;
+        if (inputB && parseInt(inputB.value, 10) !== rgbVals.b) inputB.value = rgbVals.b;
+        updateSpotlightPosition();
+      };
+
+      if (colorPicker) {
+        colorPicker.addEventListener('input', () => {
+          updateAllColorUI(colorPicker.value);
         });
       }
+
+      if (hexText) {
+        hexText.addEventListener('input', () => {
+          let val = hexText.value.trim();
+          if (!val.startsWith('#')) val = '#' + val;
+          if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+            updateAllColorUI(val);
+          }
+        });
+      }
+
+      const handleRgbChange = () => {
+        const r = Math.max(0, Math.min(255, parseInt(inputR.value, 10) || 0));
+        const g = Math.max(0, Math.min(255, parseInt(inputG.value, 10) || 0));
+        const b = Math.max(0, Math.min(255, parseInt(inputB.value, 10) || 0));
+        const newHex = rgbToHex(r, g, b);
+        updateAllColorUI(newHex);
+      };
+
+      if (inputR) inputR.addEventListener('input', handleRgbChange);
+      if (inputG) inputG.addEventListener('input', handleRgbChange);
+      if (inputB) inputB.addEventListener('input', handleRgbChange);
+
+      if (colorSelect) {
+        colorSelect.addEventListener('change', () => {
+          if (colorSelect.value) {
+            updateAllColorUI(colorSelect.value);
+          }
+        });
+      }
+
       if (removeBtn) {
         removeBtn.addEventListener('click', () => {
           currentSettings.spotlights.splice(idx, 1);
@@ -2938,6 +3035,7 @@ function animate() {
   }
 
   renderer.render(scene, camera);
+  renderPreviewViewport();
 }
 
 function updateFPSCamera(delta) {
@@ -2998,6 +3096,173 @@ function updateXYZVisibility() {
       }
     }
   }
+}
+
+// --- 3D Asset & Stage Lighting Preview Viewport Engine ---
+let previewRenderer = null;
+let previewCamera = null;
+let previewHelpersVisible = true;
+let isPreviewDragging = false;
+let previewDragStartX = 0;
+let previewDragStartY = 0;
+let previewCamRotH = 0.5; // radians horizontal orbit
+let previewCamRotV = 0.3; // radians vertical orbit
+let previewCamDist = 6.0;
+
+function initPreviewViewport() {
+  const canvas = document.getElementById('settings-preview-canvas');
+  if (!canvas) return;
+
+  try {
+    previewRenderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+    previewRenderer.setSize(canvas.clientWidth || 300, canvas.clientHeight || 180);
+    previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    previewRenderer.shadowMap.enabled = true;
+    previewRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    previewCamera = new THREE.PerspectiveCamera(45, (canvas.clientWidth || 300) / (canvas.clientHeight || 180), 0.1, 100);
+    updatePreviewCameraPosition();
+
+    // Mouse orbit controls for preview canvas
+    canvas.addEventListener('mousedown', (e) => {
+      isPreviewDragging = true;
+      previewDragStartX = e.clientX;
+      previewDragStartY = e.clientY;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isPreviewDragging) return;
+      const deltaX = e.clientX - previewDragStartX;
+      const deltaY = e.clientY - previewDragStartY;
+      previewDragStartX = e.clientX;
+      previewDragStartY = e.clientY;
+
+      previewCamRotH -= deltaX * 0.01;
+      previewCamRotV = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, previewCamRotV + deltaY * 0.01));
+      updatePreviewCameraPosition();
+    });
+
+    window.addEventListener('mouseup', () => {
+      isPreviewDragging = false;
+    });
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      previewCamDist = Math.max(2.0, Math.min(15.0, previewCamDist + e.deltaY * 0.005));
+      updatePreviewCameraPosition();
+    }, { passive: false });
+
+    // Preview HUD Buttons
+    const resetBtn = document.getElementById('preview-btn-reset');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        previewCamRotH = 0.5;
+        previewCamRotV = 0.3;
+        previewCamDist = 6.0;
+        updatePreviewCameraPosition();
+      });
+    }
+
+    const helpersBtn = document.getElementById('preview-btn-helpers');
+    if (helpersBtn) {
+      helpersBtn.addEventListener('click', () => {
+        previewHelpersVisible = !previewHelpersVisible;
+        helpersBtn.classList.toggle('active', previewHelpersVisible);
+      });
+    }
+
+    const frontBtn = document.getElementById('preview-btn-front');
+    if (frontBtn) {
+      frontBtn.addEventListener('click', () => {
+        previewCamRotH = 0;
+        previewCamRotV = 0;
+        previewCamDist = 6.0;
+        updatePreviewCameraPosition();
+      });
+    }
+
+    const topBtn = document.getElementById('preview-btn-top');
+    if (topBtn) {
+      topBtn.addEventListener('click', () => {
+        previewCamRotH = 0;
+        previewCamRotV = Math.PI / 2 - 0.05;
+        previewCamDist = 6.0;
+        updatePreviewCameraPosition();
+      });
+    }
+
+    const isoBtn = document.getElementById('preview-btn-iso');
+    if (isoBtn) {
+      isoBtn.addEventListener('click', () => {
+        previewCamRotH = Math.PI / 4;
+        previewCamRotV = Math.PI / 6;
+        previewCamDist = 6.0;
+        updatePreviewCameraPosition();
+      });
+    }
+  } catch (e) {
+    console.warn("Could not initialize 3D preview viewport:", e);
+  }
+}
+
+function updatePreviewCameraPosition() {
+  if (!previewCamera) return;
+  const cx = previewCamDist * Math.cos(previewCamRotV) * Math.sin(previewCamRotH);
+  const cy = previewCamDist * Math.sin(previewCamRotV);
+  const cz = previewCamDist * Math.cos(previewCamRotV) * Math.cos(previewCamRotH);
+  previewCamera.position.set(cx, cy, cz);
+  previewCamera.lookAt(0, 0, 0);
+}
+
+function renderPreviewViewport() {
+  const container = document.getElementById('settings-preview-container');
+  const canvas = document.getElementById('settings-preview-canvas');
+  if (!isSettingsOpen || !container || !canvas || !previewRenderer || !previewCamera || !scene) return;
+
+  // Skip rendering if preview container is hidden (offsetParent === null) or has 0 dimensions
+  if (container.offsetParent === null || canvas.clientWidth === 0 || canvas.clientHeight === 0) return;
+
+  // Ensure helper visibility in preview matches user toggle & spotlight enabled state
+  stageSpotLightHelpers.forEach((h, idx) => {
+    if (h) {
+      const spotConfig = Array.isArray(currentSettings.spotlights) ? currentSettings.spotlights[idx] : null;
+      const isEnabled = spotConfig ? !!spotConfig.enabled : false;
+      h.visible = previewHelpersVisible && isSettingsOpen && isEnabled;
+    }
+  });
+
+  // Handle canvas resize dynamically if settings panel changes size
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  if (width > 0 && height > 0 && (canvas.width !== width || canvas.height !== height)) {
+    previewRenderer.setSize(width, height, false);
+    previewCamera.aspect = width / height;
+    previewCamera.updateProjectionMatrix();
+  }
+
+  try {
+    previewRenderer.render(scene, previewCamera);
+    updatePreviewHUD();
+  } catch (e) {
+    console.warn("Error rendering preview viewport:", e);
+  }
+}
+
+function updatePreviewHUD() {
+  const hud = document.getElementById('preview-angle-hud');
+  if (!hud) return;
+
+  if (!Array.isArray(currentSettings.spotlights) || currentSettings.spotlights.length === 0) {
+    hud.innerText = t('no_spotlights') || 'No Spotlights Active';
+    return;
+  }
+
+  const lines = currentSettings.spotlights.map((spot, idx) => {
+    const status = spot.enabled ? 'ON' : 'OFF';
+    return `#${idx + 1} (${status}): H:${spot.angleH ?? 45}° V:${spot.angleV ?? 60}° Cone:${spot.cone ?? 35}° Int:${spot.intensity ?? 2.0}x`;
+  });
+
+  hud.innerText = lines.join(' | ');
 }
 
 // Initialize on load
