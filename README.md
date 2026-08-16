@@ -2,7 +2,7 @@
 
 A borderless, transparent, interactive 3D desktop companion pet for Windows powered by **Electron**, **Three.js**, and **i18next**.
 
-> 📖 **Full User Manual:** For complete guides on controls, custom 3D model loading, FPS camera flight, physics throwing, stage spotlights, and 31-language setup, please see **[USER_MANUAL.md](file:///c:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T01%20V1/USER_MANUAL.md)**.
+> 📖 **Full User Manual:** For complete guides on controls, custom 3D model loading, FPS camera flight, physics throwing, stage spotlights, and 31-language setup, please see **[USER_MANUAL.md](file:///c:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T03/USER_MANUAL.md)**.
 
 ---
 
@@ -37,7 +37,7 @@ npm install
 
 ## 🌐 Language Localization Prerequisites & Setup
 
-Desktop Pet uses **i18next** to support **31 international languages** natively across all UI controls, studio tabs, 3D preview viewports, and HUD badges.
+Desktop Pet uses **i18next** to support **12 core mainstream languages** natively across all UI controls, studio tabs, 3D preview viewports, and HUD badges (accounting for >95% of active global desktop users). Unlisted system languages automatically fall back to English (`en`).
 
 ### 1. Localization Prerequisites
 - **`i18next` Package**: Installed automatically during `npm install` (`"i18next": "^26.3.6"` in `package.json`).
@@ -48,11 +48,11 @@ Before starting the dev server or packaging the application executable, you **mu
 ```bash
 node scratch_create_locales.js
 ```
-This script performs a 100% key parity build across all 31 supported language codes:
-- Creates `locales/<lang>/translation.json` for all 31 languages.
+This script performs a 100% key parity build across all 12 core language codes:
+- Creates `locales/<lang>/translation.json` for all 12 core languages.
 - Ensures all **95 UI keys** exist in every language dictionary with fallback protection to guarantee no missing text errors.
 
-### 3. Supported Languages Scope (31 Locales)
+### 3. Supported Languages Scope (12 Core Locales)
 | Language Code | Language Name |
 | :--- | :--- |
 | `en` | English |
@@ -66,32 +66,13 @@ This script performs a 100% key parity build across all 31 supported language co
 | `es-419` | Español - Latinoamérica (Spanish - Latin America) |
 | `it` | Italiano (Italian) |
 | `pt-BR` | Português - Brasil (Portuguese - Brazil) |
-| `pt-PT` | Português - Portugal (Portuguese - Portugal) |
 | `ru` | Русский (Russian) |
-| `uk` | Українська (Ukrainian) |
-| `pl` | Polski (Polish) |
-| `tr` | Türkçe (Turkish) |
-| `vi` | Tiếng Việt (Vietnamese) |
-| `ar` | العربية (Arabic) |
-| `bg` | Български (Bulgarian) |
-| `cs` | Čeština (Czech) |
-| `da` | Dansk (Danish) |
-| `nl` | Nederlands (Dutch) |
-| `fi` | Suomi (Finnish) |
-| `el` | Ελληνικά (Greek) |
-| `hu` | Magyar (Hungarian) |
-| `id` | Bahasa Indonesia (Indonesian) |
-| `ms` | Bahasa Melayu (Malay) |
-| `no` | Norsk (Norwegian) |
-| `ro` | Română (Romanian) |
-| `sv` | Svenska (Swedish) |
-| `th` | ไทย (Thai) |
 
 ### 4. Adding or Updating Custom Translations
 If you add new UI elements or want to edit existing translations:
 1. Open `scratch_create_locales.js`.
 2. Add or modify translation keys inside `newTranslations`.
-3. Run `node scratch_create_locales.js` to propagate the changes to all 31 `translation.json` files.
+3. Run `node scratch_create_locales.js` to propagate the changes to all 12 `translation.json` files.
 4. Rebuild the app binary with `npm run build`.
 
 ---
@@ -105,13 +86,18 @@ npm start
 ```
 To run the automated unit test suite (SettingsManager & PhysicsEngine tests):
 ```bash
+# Standard Command Prompt / Bash:
 npm test
+
+# Direct Node execution (works in all Windows PowerShell environments):
+node tests/run_tests.mjs
 ```
 
 ### 2. Build Standalone Production Executable
 To package the app into a standalone Windows executable binary (`DesktopPet.exe` inside `DesktopPet-win32-x64/`):
-```bash
-npm run build
+```cmd
+# Standard Command Prompt (cmd) / PowerShell (via cmd wrapper):
+cmd /c npm run build
 ```
 
 Alternatively, if building directly via Command Prompt:
@@ -121,14 +107,15 @@ npx electron-packager . DesktopPet --platform=win32 --arch=x64 --overwrite
 
 ---
 
-### ⚠️ PowerShell Build Troubleshooting
+### ⚠️ PowerShell Script Execution Policy Troubleshooting
 
-If running `npm run build` inside PowerShell returns an execution policy restriction error:
+If running `npm run build` or `npm test` inside PowerShell returns an execution policy restriction error:
 > *npm : File C:\Program Files\nodejs\npm.ps1 cannot be loaded because running scripts is disabled on this system.*
 
-**Solution Option A (Recommended):** Use standard Windows Command Prompt (`cmd`):
+**Solution Option A (Recommended):** Wrap command execution with standard Windows Command Prompt (`cmd`):
 ```cmd
 cmd /c npm run build
+cmd /c npm test
 ```
 
 **Solution Option B:** Temporarily bypass script execution policy in PowerShell:
@@ -150,3 +137,43 @@ DesktopPet-win32-x64/
   └── ...
 ```
 Double-click `DesktopPet.exe` to launch the standalone application!
+
+---
+
+## 🏗️ Codebase Architecture & Modular Structure
+
+The project follows a modular, decoupled domain structure designed for performance, maintainability, and clean separation of concerns:
+
+```
+src/
+├── core/                       <-- 3D WebGL & Application Core
+│   ├── AnimationLoopManager.js <-- Main RAF render loop manager
+│   ├── AppInitializer.js       <-- Application bootstrap & WebGL setup
+│   ├── AppStateContainer.js    <-- Centralized state store proxy
+│   ├── LightingManager.js      <-- Multi-source stage spotlight controls
+│   ├── MascotBuilder.js        <-- Procedural 3D mesh fallback builder
+│   ├── ModelLoader.js          <-- GLTF/GLB asset importer & bounding box parser
+│   └── ...
+├── managers/                   <-- State & Persistence Managers
+│   └── SettingsManager.js      <-- Atomic settings JSON staging & config healing
+├── main/                       <-- Electron Main Process Services
+│   ├── Logger.js               <-- File log streams
+│   └── SteamService.js         <-- Steamworks API wrapper
+└── ui/                         <-- Studio UI & Viewport Controls
+    ├── PreviewViewportEngine.js<-- Secondary WebGL preview canvas renderer
+    ├── SettingsPanelUI.js      <-- 6-tab studio control suite UI
+    ├── SpotlightCardsUI.js     <-- Real-time spotlight card visualizers
+    └── ...
+```
+
+---
+
+## 🤖 AI Companion Readiness & Expansion Roadmap
+
+While Desktop Pet is currently a 100% deterministic 3D desktop graphics engine, its decoupled IPC architecture, transparent overlay, dynamic GLTF animation mixer, and WebGL rendering pipeline serve as an ideal foundation for an **AI Agent Companion Avatar**:
+
+- **Phase 1 (Conversational Brain)**: Connect local LLM servers (e.g. Ollama, Llama.cpp) or Cloud APIs (Gemini, OpenAI) for dialogue.
+- **Phase 2 (Voice & Lip-Sync)**: Integrate Whisper STT and Kokoro/Piper TTS with Three.js morph-target viseme animation drivers.
+- **Phase 3 (Vision Perception)**: Implement periodic desktop screen capture via Electron `desktopCapturer` passed to Vision-Language Models (VLMs).
+- **Phase 4 (Autonomous Agent Loop)**: Replace fixed bobbing with an AI emotional state machine and desktop tool-calling capabilities.
+

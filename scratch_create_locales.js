@@ -1312,12 +1312,10 @@ const newTranslations = {
   }
 };
 
-// Auto-fallback builder: merge English keys into all 31 supported languages
+// Auto-fallback builder: merge English keys into all 12 core supported languages
 const masterEN = newTranslations["en"];
 const supportedCodes = [
-  'en', 'fr', 'de', 'es', 'it', 'ja', 'ko', 'pl', 'pt-BR', 'ru',
-  'tr', 'vi', 'zh-CN', 'zh-TW', 'ar', 'bg', 'cs', 'da', 'nl', 'fi',
-  'el', 'hu', 'id', 'ms', 'no', 'pt-PT', 'ro', 'es-419', 'sv', 'th', 'uk'
+  'en', 'zh-CN', 'zh-TW', 'ja', 'ko', 'fr', 'de', 'es', 'es-419', 'it', 'pt-BR', 'ru'
 ];
 
 let count = 0;
@@ -1331,7 +1329,7 @@ supportedCodes.forEach(code => {
   const merged = Object.assign({}, masterEN, newTranslations[code] || {});
   fs.writeFileSync(filePath, JSON.stringify(merged, null, 2) + '\n', 'utf8');
   count++;
-  console.log(`[${count}/31] Generated locale file: ${filePath} (${Object.keys(merged).length} keys)`);
+  console.log(`[${count}/12] Generated locale file: ${filePath} (${Object.keys(merged).length} keys)`);
 });
 
 console.log(`\nSuccessfully created all ${count} locale translation files!`);

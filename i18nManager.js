@@ -1,38 +1,19 @@
 import i18next from 'i18next';
 
-// 31 Supported Languages Scope
+// 12 Core Mainstream Languages Scope
 export const SUPPORTED_LANGUAGES = [
   { code: 'en', label: 'English' },
-  { code: 'fr', label: 'Français (French)' },
-  { code: 'it', label: 'Italiano (Italian)' },
-  { code: 'de', label: 'Deutsch (German)' },
-  { code: 'es', label: 'Español - España (Spanish - Spain)' },
-  { code: 'ar', label: 'العربية (Arabic)' },
-  { code: 'bg', label: 'Български (Bulgarian)' },
-  { code: 'cs', label: 'Čeština (Czech)' },
-  { code: 'da', label: 'Dansk (Danish)' },
-  { code: 'nl', label: 'Nederlands (Dutch)' },
-  { code: 'fi', label: 'Suomi (Finnish)' },
-  { code: 'el', label: 'Ελληνικά (Greek)' },
-  { code: 'hu', label: 'Magyar (Hungarian)' },
-  { code: 'id', label: 'Bahasa Indonesia (Indonesian)' },
+  { code: 'zh-CN', label: '简体中文 (Simplified Chinese)' },
+  { code: 'zh-TW', label: '繁體中文 (Traditional Chinese)' },
   { code: 'ja', label: '日本語 (Japanese)' },
   { code: 'ko', label: '한국어 (Korean)' },
-  { code: 'ms', label: 'Bahasa Melayu (Malay)' },
-  { code: 'no', label: 'Norsk (Norwegian)' },
-  { code: 'pl', label: 'Polski (Polish)' },
-  { code: 'pt-BR', label: 'Português - Brasil (Portuguese - Brazil)' },
-  { code: 'pt-PT', label: 'Português - Portugal (Portuguese - Portugal)' },
-  { code: 'ro', label: 'Română (Romanian)' },
-  { code: 'ru', label: 'Русский (Russian)' },
-  { code: 'zh-CN', label: '简体中文 (Simplified Chinese)' },
+  { code: 'fr', label: 'Français (French)' },
+  { code: 'de', label: 'Deutsch (German)' },
+  { code: 'es', label: 'Español - España (Spanish - Spain)' },
   { code: 'es-419', label: 'Español - Latinoamérica (Spanish - Latin America)' },
-  { code: 'sv', label: 'Svenska (Swedish)' },
-  { code: 'th', label: 'ไทย (Thai)' },
-  { code: 'zh-TW', label: '繁體中文 (Traditional Chinese)' },
-  { code: 'tr', label: 'Türkçe (Turkish)' },
-  { code: 'uk', label: 'Українська (Ukrainian)' },
-  { code: 'vi', label: 'Tiếng Việt (Vietnamese)' }
+  { code: 'it', label: 'Italiano (Italian)' },
+  { code: 'pt-BR', label: 'Português - Brasil (Portuguese - Brazil)' },
+  { code: 'ru', label: 'Русский (Russian)' }
 ];
 
 // Helper to detect initial user/system language
@@ -42,32 +23,13 @@ function detectSystemLanguage() {
   if (navLang.startsWith('zh')) return 'zh-CN';
   if (navLang.startsWith('ja')) return 'ja';
   if (navLang.startsWith('ko')) return 'ko';
-  if (navLang.startsWith('pt-PT')) return 'pt-PT';
-  if (navLang.startsWith('pt')) return 'pt-BR';
+  if (navLang.startsWith('pt-BR') || navLang.startsWith('pt')) return 'pt-BR';
   if (navLang.startsWith('es-419') || navLang.includes('MX') || navLang.includes('AR') || navLang.includes('CO') || navLang.includes('CL')) return 'es-419';
   if (navLang.startsWith('es')) return 'es';
   if (navLang.startsWith('de')) return 'de';
   if (navLang.startsWith('fr')) return 'fr';
   if (navLang.startsWith('it')) return 'it';
   if (navLang.startsWith('ru')) return 'ru';
-  if (navLang.startsWith('pl')) return 'pl';
-  if (navLang.startsWith('tr')) return 'tr';
-  if (navLang.startsWith('vi')) return 'vi';
-  if (navLang.startsWith('ar')) return 'ar';
-  if (navLang.startsWith('bg')) return 'bg';
-  if (navLang.startsWith('cs')) return 'cs';
-  if (navLang.startsWith('da')) return 'da';
-  if (navLang.startsWith('nl')) return 'nl';
-  if (navLang.startsWith('fi')) return 'fi';
-  if (navLang.startsWith('el')) return 'el';
-  if (navLang.startsWith('hu')) return 'hu';
-  if (navLang.startsWith('id')) return 'id';
-  if (navLang.startsWith('ms')) return 'ms';
-  if (navLang.startsWith('no') || navLang.startsWith('nb') || navLang.startsWith('nn')) return 'no';
-  if (navLang.startsWith('ro')) return 'ro';
-  if (navLang.startsWith('sv')) return 'sv';
-  if (navLang.startsWith('th')) return 'th';
-  if (navLang.startsWith('uk')) return 'uk';
   return 'en';
 }
 

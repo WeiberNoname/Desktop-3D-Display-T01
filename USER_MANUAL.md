@@ -14,7 +14,7 @@ Desktop Pet is a floating, borderless, fully transparent (RGBA 0,0,0,0) 3D inter
 - **First-Person Perspective (FPS) Mode**: 360-degree pointer lock camera aiming with WASD flight controls.
 - **Multi-Source Stage Spotlights**: Control up to 4 dynamic 3D spotlights with custom colors, angles, and dark stage presets.
 - **Physics Engine**: Throw the mascot across the screen with gravity, momentum, and ground landing colliders.
-- **31 International Languages**: Instant live dynamic language switching across all studio tabs and settings controls.
+- **12 Core International Languages**: Instant live dynamic language switching across all studio tabs and settings controls (with automatic English fallback for unlisted system locales).
 
 ---
 
@@ -74,14 +74,14 @@ The Settings Panel is divided into 6 categorized studio tabs:
 3. **🔦 Lighting**: Multi-source stage spotlight controls (up to 4 lights), master ambient light dimmer, Dark Stage Mode, and Dual Concert presets.
 4. **⚡ Physics**: Enable physics engine, gravity slider, bounciness elasticity, ground landing collider, and momentum throw info.
 5. **🎥 Camera**: First-person camera mode toggle, spatial XYZ coordinate HUD overlay, 3D ground reference grid, viewport controls.
-6. **⚙️ System**: Language selector (31 locales), UI font scale slider, settings icon placement toggle, collapsible diagnostic log console, and Steam stats reset button.
+6. **⚙️ System**: Language selector (12 core locales), UI font scale slider, settings icon placement toggle, collapsible diagnostic log console, and Steam stats reset button.
 
 ---
 
-## 🌍 31-Language (i18n) Developer Instructions
+## 🌍 12-Language (i18n) Developer Instructions
 
-### Supported Languages (31 Locales)
-`en`, `zh-CN`, `zh-TW`, `ja`, `ko`, `es`, `fr`, `de`, `it`, `pt-BR`, `ru`, `tr`, `vi`, `pl`, `ar`, `bg`, `cs`, `da`, `nl`, `fi`, `el`, `hu`, `id`, `ms`, `no`, `pt-PT`, `ro`, `es-419`, `sv`, `th`, `uk`.
+### Supported Core Languages (12 Locales)
+`en`, `zh-CN`, `zh-TW`, `ja`, `ko`, `fr`, `de`, `es`, `es-419`, `it`, `pt-BR`, `ru`.
 
 ### How to Add or Modify Translation Keys
 1. Add new key-value pairs in **`scratch_create_locales.js`** under `newTranslations["en"]` and **`locales/en/translation.json`**.
