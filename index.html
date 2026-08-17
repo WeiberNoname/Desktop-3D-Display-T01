@@ -109,6 +109,21 @@
               style="font-size: 10px; opacity: 0.7;" data-i18n="gpu_sub">(Requires Restart)</span></label>
         </div>
         <div class="setting-item checkbox">
+          <input type="checkbox" id="gpu-low-power">
+          <label for="gpu-low-power"><span data-i18n="gpu_low_power">Low-Power GPU Battery Saver</span> <span
+              style="font-size: 10px; opacity: 0.7;" data-i18n="gpu_low_power_sub">(Requires Restart)</span></label>
+        </div>
+        <div class="setting-item checkbox">
+          <input type="checkbox" id="idle-fps-saver">
+          <label for="idle-fps-saver"><span data-i18n="idle_fps_saver">Idle Frame Rate Saver (30 FPS)</span> <span
+              style="font-size: 10px; opacity: 0.7;" data-i18n="idle_fps_saver_sub">(Caps idle rendering)</span></label>
+        </div>
+        <div class="setting-item checkbox">
+          <input type="checkbox" id="dynamic-battery-saver" checked>
+          <label for="dynamic-battery-saver"><span data-i18n="dynamic_battery_saver">Dynamic Battery Saver</span> <span
+              style="font-size: 10px; opacity: 0.7;" data-i18n="dynamic_battery_saver_sub">(Auto-throttles FPS when idle/unfocused)</span></label>
+        </div>
+        <div class="setting-item checkbox">
           <input type="checkbox" id="mouse-optimize" checked>
           <label for="mouse-optimize"><span data-i18n="mouse_optimize">Seamless Performance Mode</span> <span
               style="font-size: 10px; opacity: 0.7;" data-i18n="mouse_sub">(Throttled Proxy)</span></label>
@@ -265,8 +280,12 @@
               <strong data-i18n="pan_sub">Shift + MMB (or Left) Drag</strong>
             </div>
             <div class="help-row">
+              <span data-i18n="roll_spin">Z-Axis Spin (Roll)</span>
+              <strong data-i18n="roll_spin_sub">Ctrl + Left Arc Drag</strong>
+            </div>
+            <div class="help-row">
               <span data-i18n="zoom">Zoom (Depth)</span>
-              <strong data-i18n="zoom_sub">Scroll (or Ctrl + MMB/Left)</strong>
+              <strong data-i18n="zoom_sub">Scroll Wheel (Depth)</strong>
             </div>
             <div class="help-row">
               <span data-i18n="ortho">Orthographic Views</span>

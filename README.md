@@ -2,7 +2,7 @@
 
 A borderless, transparent, interactive 3D desktop companion pet for Windows powered by **Electron**, **Three.js**, and **i18next**.
 
-> 📖 **Full User Manual:** For complete guides on controls, custom 3D model loading, FPS camera flight, physics throwing, stage spotlights, and 31-language setup, please see **[USER_MANUAL.md](file:///c:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T03/USER_MANUAL.md)**.
+> 📖 **Full User Manual:** For complete guides on controls, custom 3D model loading, FPS camera flight, physics throwing, stage spotlights, Z-axis roll spin, panel edge resizing, dynamic battery saver mode, and 12-language setup, please see **[USER_MANUAL.md](file:///c:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T03/USER_MANUAL.md)**.
 
 ---
 
@@ -50,7 +50,7 @@ node scratch_create_locales.js
 ```
 This script performs a 100% key parity build across all 12 core language codes:
 - Creates `locales/<lang>/translation.json` for all 12 core languages.
-- Ensures all **95 UI keys** exist in every language dictionary with fallback protection to guarantee no missing text errors.
+- Ensures all **103 UI keys** exist in every language dictionary with fallback protection to guarantee no missing text errors.
 
 ### 3. Supported Languages Scope (12 Core Locales)
 | Language Code | Language Name |
@@ -161,6 +161,7 @@ src/
 │   └── SteamService.js         <-- Steamworks API wrapper
 └── ui/                         <-- Studio UI & Viewport Controls
     ├── PreviewViewportEngine.js<-- Secondary WebGL preview canvas renderer
+    ├── SettingsPanelResizeHandler.js <-- Settings panel edge drag-to-resize handler
     ├── SettingsPanelUI.js      <-- 6-tab studio control suite UI
     ├── SpotlightCardsUI.js     <-- Real-time spotlight card visualizers
     └── ...

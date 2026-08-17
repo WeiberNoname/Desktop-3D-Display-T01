@@ -14,6 +14,9 @@ export function createRenderLoopDelegates(deps) {
     getContext
   } = deps;
 
+  let idleDeltaAccumulator = 0;
+  let batteryDeltaAccumulator = 0;
+
   const animate = () => {
     requestAnimationFrame(animate);
 
@@ -22,6 +25,48 @@ export function createRenderLoopDelegates(deps) {
     const now = Date.now();
 
     const ctx = getContext();
+    const currentSettings = ctx.currentSettings || {};
+
+    // Dynamic Battery Saver Option: Throttles to ~15 FPS when unfocused or idle
+    if (currentSettings.dynamicBatterySaver !== false) {
+      const isUnfocused = typeof document !== 'undefined' && !document.hasFocus();
+      const isHovered = ctx.isMouseOverCharacter || ctx.isMouseOverUI || ctx.isSettingsOpen;
+      const isInteracting = ctx.animationState && ctx.animationState.type === 'interact';
+      const isDragging = ctx.isDragging || ctx.isResizingPanel;
+      const isPhysicsActive = ctx.physicsEngine && ctx.physicsEngine.enabled && ctx.physicsEngine.isDragging;
+      const isFpsActive = currentSettings.enableFPSMode;
+
+      const isInactive = isUnfocused || (!isHovered && !isInteracting && !isDragging && !isPhysicsActive && !isFpsActive);
+
+      if (isInactive) {
+        batteryDeltaAccumulator += delta;
+        if (batteryDeltaAccumulator < 0.066) {
+          return; // Skip rendering frame to cap at ~15 FPS in battery saver mode
+        }
+        batteryDeltaAccumulator %= 0.066;
+      } else {
+        batteryDeltaAccumulator = 0;
+      }
+    } else if (currentSettings.idleFpsSaver) {
+      const isInteracting = ctx.animationState && ctx.animationState.type === 'interact';
+      const isDragging = ctx.isDragging;
+      const isPhysicsActive = ctx.physicsEngine && ctx.physicsEngine.enabled && ctx.physicsEngine.isDragging;
+      const isFpsActive = currentSettings.enableFPSMode;
+
+      if (!isInteracting && !isDragging && !isPhysicsActive && !isFpsActive) {
+        idleDeltaAccumulator += delta;
+        if (idleDeltaAccumulator < 0.032) {
+          return; // Skip rendering frame to cap at ~30 FPS
+        }
+        idleDeltaAccumulator %= 0.032;
+      } else {
+        idleDeltaAccumulator = 0;
+      }
+    } else {
+      idleDeltaAccumulator = 0;
+      batteryDeltaAccumulator = 0;
+    }
+
     updateAnimationFrameUtil({
       delta,
       elapsed,

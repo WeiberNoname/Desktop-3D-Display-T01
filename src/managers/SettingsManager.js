@@ -12,6 +12,9 @@ export class SettingsManager {
       speedY: 1.0,
       speedZ: 1.0,
       gpuOptimize: true,
+      gpuLowPower: false,
+      idleFpsSaver: false,
+      dynamicBatterySaver: true,
       mouseOptimize: true,
       settingsLeft: false,
       lockPosition: false,
@@ -123,6 +126,9 @@ language=en`;
             if (key === 'speedY') { currentSettings.speedY = parseFloat(val) || 1.0; validKeysParsed++; }
             if (key === 'speedZ') { currentSettings.speedZ = parseFloat(val) || 1.0; validKeysParsed++; }
             if (key === 'gpuOptimize') { currentSettings.gpuOptimize = (val !== 'false'); validKeysParsed++; }
+            if (key === 'gpuLowPower') { currentSettings.gpuLowPower = (val === 'true'); validKeysParsed++; }
+            if (key === 'idleFpsSaver') { currentSettings.idleFpsSaver = (val === 'true'); validKeysParsed++; }
+            if (key === 'dynamicBatterySaver') { currentSettings.dynamicBatterySaver = (val !== 'false'); validKeysParsed++; }
             if (key === 'mouseOptimize') { currentSettings.mouseOptimize = (val !== 'false'); validKeysParsed++; }
             if (key === 'settingsLeft') { currentSettings.settingsLeft = (val === 'true'); validKeysParsed++; }
             if (key === 'lockPosition') { currentSettings.lockPosition = (val === 'true'); validKeysParsed++; }
@@ -205,6 +211,9 @@ speedX=${currentSettings.speedX}
 speedY=${currentSettings.speedY}
 speedZ=${currentSettings.speedZ}
 gpuOptimize=${currentSettings.gpuOptimize}
+gpuLowPower=${currentSettings.gpuLowPower}
+idleFpsSaver=${currentSettings.idleFpsSaver}
+dynamicBatterySaver=${currentSettings.dynamicBatterySaver}
 mouseOptimize=${currentSettings.mouseOptimize}
 settingsLeft=${currentSettings.settingsLeft}
 lockPosition=${currentSettings.lockPosition}

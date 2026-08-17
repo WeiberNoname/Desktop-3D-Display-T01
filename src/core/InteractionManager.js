@@ -65,6 +65,7 @@ export function setupInteraction(ctx) {
       effectiveHover ||
       state.isMouseOverUI ||
       state.isDragging ||
+      state.isResizingPanel ||
       state.isNavigating ||
       currentSettings.enableFPSMode ||
       state.altKeyHeld ||
@@ -107,6 +108,11 @@ export function setupInteraction(ctx) {
         } else if (state.navType === 'pan') {
           innerModelGroup.position.x = state.navStartTranslationX + deltaX * 0.005;
           innerModelGroup.position.y = state.navStartTranslationY - deltaY * 0.005;
+        } else if (state.navType === 'roll') {
+          const currentAngle = Math.atan2(event.clientY - state.navCenterY, event.clientX - state.navCenterX);
+          let deltaAngle = currentAngle - state.navStartAngle;
+          innerModelGroup.rotation.z = state.navStartRotationZ + deltaAngle;
+          if (currentSettings) currentSettings.rotZ = innerModelGroup.rotation.z;
         } else if (state.navType === 'zoom') {
           const zPos = state.navStartTranslationZ - deltaY * 0.01;
           innerModelGroup.position.z = Math.max(-10.0, Math.min(4.0, zPos));
@@ -223,22 +229,30 @@ export function setupInteraction(ctx) {
 
     const isOrbit = event.altKey || (isMMB && !event.shiftKey && !event.ctrlKey);
     const isPan = event.shiftKey;
-    const isZoom = event.ctrlKey;
+    const isRoll = event.ctrlKey;
 
     const innerModelGroup = getInnerModelGroup();
-    if (isOrbit || isPan || isZoom) {
+    if (isOrbit || isPan || isRoll) {
       if (innerModelGroup) {
         state.isNavigating = true;
-        state.navType = isOrbit ? 'orbit' : (isPan ? 'pan' : 'zoom');
+        state.navType = isOrbit ? 'orbit' : (isPan ? 'pan' : 'roll');
         state.navStartMouseX = event.clientX;
         state.navStartMouseY = event.clientY;
         state.navStartRotationX = innerModelGroup.rotation.x;
         state.navStartRotationY = innerModelGroup.rotation.y;
+        state.navStartRotationZ = innerModelGroup.rotation.z;
         state.navStartTranslationX = innerModelGroup.position.x;
         state.navStartTranslationY = innerModelGroup.position.y;
         state.navStartTranslationZ = innerModelGroup.position.z;
 
-        document.body.style.cursor = isOrbit ? 'all-scroll' : (isPan ? 'move' : 'zoom-in');
+        if (isRoll) {
+          const rect = (renderer && renderer.domElement) ? renderer.domElement.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+          state.navCenterX = rect.left + rect.width / 2;
+          state.navCenterY = rect.top + rect.height / 2;
+          state.navStartAngle = Math.atan2(event.clientY - state.navCenterY, event.clientX - state.navCenterX);
+        }
+
+        document.body.style.cursor = isOrbit ? 'all-scroll' : (isPan ? 'move' : 'sync');
         updateIgnoreMouseState();
       }
       return;

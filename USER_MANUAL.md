@@ -35,6 +35,7 @@ Desktop Pet is a floating, borderless, fully transparent (RGBA 0,0,0,0) 3D inter
 | **Ctrl + Shift + C** | Globally | Toggle live **Spatial XYZ Coordinates HUD** overlay badge. |
 | **Ctrl + V** | Globally | Toggle **View Only Mode** (fades mascot to fully transparent on hover). |
 | **Alt + Drag** (or MMB) | Viewport | **Orbit View (3D Rotate):** Rotates camera angle around 3D mascot. |
+| **Ctrl + Drag** | Viewport | **Z-Axis Spin (Roll Tilt):** Rotates mascot on Z-axis via circular mouse arc. |
 | **Shift + Drag** | Viewport | **Pan View (3D Translate):** Moves camera position up/down and left/right. |
 | **Scroll Wheel** | Viewport | **Zoom View (3D Depth):** Scales camera distance closer or further away. |
 
@@ -70,7 +71,7 @@ The application automatically detects, centers, and renders custom 3D assets:
 The Settings Panel is divided into 6 categorized studio tabs:
 
 1. **🎯 Display**: Active mascot selector, preview thumbnail generator grid, animation selector, window width/height, and model scale sliders.
-2. **🌀 Motion**: Idle bobbing, position locking, view-only mode, GPU & mouse optimizations, X/Y/Z axis spinning controls.
+2. **🌀 Motion**: Idle bobbing, position locking, view-only mode, Dynamic Battery Saver (auto-throttles FPS when idle/unfocused), GPU & mouse optimizations, X/Y/Z axis spinning controls.
 3. **🔦 Lighting**: Multi-source stage spotlight controls (up to 4 lights), master ambient light dimmer, Dark Stage Mode, and Dual Concert presets.
 4. **⚡ Physics**: Enable physics engine, gravity slider, bounciness elasticity, ground landing collider, and momentum throw info.
 5. **🎥 Camera**: First-person camera mode toggle, spatial XYZ coordinate HUD overlay, 3D ground reference grid, viewport controls.

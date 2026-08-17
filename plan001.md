@@ -1,131 +1,112 @@
-# Plan 001: Settings Panel 3D Asset Preview & Real-Time Spotlight Angle/Position Visualizer
+# Plan 001: Z-Axis Model Spin Rotation via Ctrl + Drag Interaction
 
 ## Problem Statement & Architecture Goals
 
-Currently, when users adjust stage lighting settings in the Settings Panel (specifically **Multi-Source Stage Spotlight Control** horizontal/vertical angles `angleH`/`angleV`, cone spread `cone`, intensity, and color), there is no live visual preview inside the Settings Panel. The main desktop mascot window may be small (e.g., 350x350px), partially covered by the Settings Panel overlay, or positioned near screen edges, making it difficult for users to evaluate spotlight angles, light cone trajectories, target positions, and 3D mascot shading in real time.
+Currently in `InteractionManager.js`:
+- **`Alt + Drag`** (or MMB without modifiers) performs 3D orbit rotation on the **X and Y axes** (`rotation.y += deltaX * 0.01` and `rotation.x += deltaY * 0.01`).
+- **`Shift + Drag`** performs 2D viewport panning on **X and Y positions**.
+- **`Ctrl + Drag`** currently controls depth translation (`position.z` zoom).
 
-To resolve this limitation, **Plan 001** is redrafted to introduce a dedicated, interactive **3D Asset & Stage Lighting Preview Viewport** directly embedded within the Settings Panel. This will enable real-time 3D rendering of the active mascot model, light beam frustums, polar angle indicators, and spotlight spatial vectors.
+There is currently **no mouse interaction shortcut to spin/rotate the 3D mascot model around its Z-axis (Roll / Tilt Spin)**. Users must manually open the Settings Panel and adjust the Z-rotation slider.
+
+This plan details 3 technical alternatives and proposes a recommended solution for enabling intuitive Z-axis spin rotation when holding `Ctrl` and dragging the mouse.
 
 ---
 
-## Technical Solution Architecture
+## 💡 Evaluation of 3 Alternatives
+
+### Alternative 1: Direct Linear Horizontal Drag (`Ctrl + Horizontal Drag`)
+* **Mechanism:** When holding `Ctrl` and left-clicking + dragging, horizontal mouse movement `deltaX` directly rotates the model around the Z-axis:
+  $$\text{rotation.z} = \text{navStartRotationZ} + \Delta X \times 0.01$$
+  Zooming is handled exclusively via the mouse scroll wheel (`wheel` event).
+* **Pros:**
+  * Clean, 1:1 linear mapping parallel to X/Y orbit rotation.
+  * Computationally simple with minimal code changes.
+* **Cons:**
+  * Vertical mouse movement (`deltaY`) is ignored during Z-spin, which can feel less fluid.
+
+---
+
+### Alternative 2: Tangential Polar Arc "Steering Wheel" Angle Calculation (Recommended 🌟)
+* **Mechanism:** When holding `Ctrl` and left-clicking + dragging, calculate the polar angle $\theta$ of the mouse cursor relative to the center of the mascot window $(C_x, C_y)$:
+  $$\theta = \text{Math.atan2}(Y_{\text{cursor}} - C_y, X_{\text{cursor}} - C_x)$$
+  As the mouse moves in an arc around the mascot center, $\text{rotation.z}$ updates dynamically to match the angular delta:
+  $$\Delta \theta = \theta_{\text{current}} - \theta_{\text{start}}$$
+  $$\text{rotation.z} = \text{navStartRotationZ} + \Delta \theta$$
+* **Pros:**
+  * **Extremely Natural Rotational Feel:** Dragging clockwise spins the mascot clockwise; dragging counter-clockwise spins it counter-clockwise (like turning a steering wheel or dial).
+  * Smooth 360-degree continuous rotation on both X and Y mouse movements.
+* **Cons:**
+  * Requires calculating screen center coordinates $(C_x, C_y)$ on `mousedown`.
+
+---
+
+### Alternative 3: Dual-Modifier Combo (`Ctrl + Alt + Drag`)
+* **Mechanism:** Retain `Ctrl + Drag` for depth zoom, and require holding `Ctrl + Alt + Drag` specifically to trigger Z-axis roll spin rotation.
+* **Pros:**
+  * Preserves existing `Ctrl + Drag` depth zoom behavior.
+* **Cons:**
+  * Requiring three simultaneous inputs (`Ctrl + Alt + Drag`) is clunky, unintuitive, and difficult on laptop trackpads.
+
+---
+
+## 🎯 Recommended Solution Architecture (Alternative 2)
+
+We recommend **Alternative 2 (Tangential Polar Arc Rotation)**.
 
 ```
-                                  +------------------------------------------------------+
-                                  |                 Settings Panel UI                    |
-                                  |                                                      |
-                                  |  +------------------------------------------------+  |
-                                  |  |   3D Preview Viewport (#settings-preview-canvas)| |
-                                  |  |   - Live Mascot Model & Shading Shaders      |  |
-                                  |  |   - Dynamic THREE.SpotLight Cone Frustums     |  |
-                                  |  |   - Polar Vector Angle Gizmos (H° / V°)       |  |
-                                  |  |   - Interactive Orbit / Pan / Reset Controls  |  |
-                                  |  +------------------------------------------------+  |
-                                  |                                                      |
-                                  |  +------------------------------------------------+  |
-                                  |  |  Lighting Tab Sliders & Spotlight Cards      |  |
-                                  |  |  [Angle H: 45°] [Angle V: 60°] [Cone: 35°]    |  |
-                                  |  +------------------------------------------------+  |
-                                  +------------------------------------------------------+
-                                                            |
-                                                            v
-                                  +------------------------------------------------------+
-                                  |          Shared Scene / Preview Camera Engine        |
-                                  |           (renderer.js - Dual Viewport)              |
-                                  +------------------------------------------------------+
+                    +---------------------------------------------------+
+                    |         User holds Ctrl + Left-Click Drag         |
+                    +---------------------------------------------------+
+                                              |
+                                              v
+                    +---------------------------------------------------+
+                    |   InteractionManager.js (mousedown event)         |
+                    |   - Detect event.ctrlKey                          |
+                    |   - Set navType = 'roll'                          |
+                    |   - Compute center (Cx, Cy) & start angle theta_0 |
+                    +---------------------------------------------------+
+                                              |
+                                              v
+                    +---------------------------------------------------+
+                    |   InteractionManager.js (mousemove event)         |
+                    |   - Compute theta_current = atan2(y - Cy, x - Cx) |
+                    |   - deltaTheta = theta_current - theta_0          |
+                    |   - innerModelGroup.rotation.z = startZ + delta   |
+                    +---------------------------------------------------+
+                                              |
+                                              v
+                    +---------------------------------------------------+
+                    |   Settings & UI Sync                              |
+                    |   - Update currentSettings.rotZ                   |
+                    |   - Sync rotZ slider in Motion Studio Tab         |
+                    +---------------------------------------------------+
 ```
 
 ---
 
-## User Review Required
+## 🛠️ Proposed File Changes
 
-> [!IMPORTANT]
-> - **Dual Viewport WebGL Rendering**: The preview viewport uses a secondary WebGL camera (`previewCamera`) and dedicated canvas (`#settings-preview-canvas`) attached to the shared Three.js `scene`. Any changes made to mascot model, lighting sliders, or spotlight properties update synchronously across both the main window and the settings preview.
-> - **Resource Efficiency**: To avoid GPU overhead, the preview rendering loop automatically pauses when the Settings Panel is closed (`isSettingsOpen === false`).
-> - **31-Language Parity**: All new UI buttons, HUD badges, and camera presets in the preview viewport will be fully annotated with `data-i18n` and translated across all 31 supported languages.
-
----
-
-## Open Questions
-
-None. The technical implementation, polar coordinate math, WebGL canvas integration, and i18n dictionary structure are fully specified.
-
----
-
-## Proposed Technical Changes
-
-### 1. Settings Panel Preview UI Container & Controls
-
-#### [MODIFY] [index.html](file:///c:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T01%20V1/index.html)
-- Add a `<div id="settings-preview-container" class="settings-preview-container">` inside `#tab-lighting` (and option to display in `#tab-display`):
-  - Canvas element: `<canvas id="settings-preview-canvas" class="settings-preview-canvas"></canvas>`
-  - Viewport HUD Overlay controls:
-    - Reset Camera button: `<button id="preview-btn-reset" class="btn preview-hud-btn" data-i18n-title="preview_reset_cam">🔄</button>`
-    - Toggle Light Cone Helpers button: `<button id="preview-btn-helpers" class="btn preview-hud-btn active" data-i18n-title="toggle_helpers">🔦</button>`
-    - View Presets: `<button id="preview-btn-front" class="btn preview-hud-btn" data-i18n="cam_front">Front</button>`, `<button id="preview-btn-top" class="btn preview-hud-btn" data-i18n="cam_top">Top</button>`, `<button id="preview-btn-iso" class="btn preview-hud-btn" data-i18n="cam_iso">Iso</button>`
-  - Polar Angle HUD readout: `<div id="preview-angle-hud" class="preview-angle-hud"></div>`
+### 1. `InteractionManager.js`
+#### [MODIFY] [InteractionManager.js](file:///c:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T03/src/core/InteractionManager.js)
+* In `mousedown`:
+  * Detect `event.ctrlKey` as `isRoll` (or Z-Spin).
+  * Calculate mascot center coordinates `(navCenterX, navCenterY)`.
+  * Compute `navStartAngle = Math.atan2(event.clientY - navCenterY, event.clientX - navCenterX)`.
+  * Store `navStartRotationZ = innerModelGroup.rotation.z`.
+* In `mousemove`:
+  * Handle `state.navType === 'roll'`:
+    * `currentAngle = Math.atan2(event.clientY - navCenterY, event.clientX - navCenterX)`
+    * `innerModelGroup.rotation.z = navStartRotationZ + (currentAngle - navStartAngle)`
+    * Update `currentSettings.rotZ` and sync UI rotZ slider if visible.
 
 ---
 
-### 2. Viewport Styling & Glassmorphism Design System
-
-#### [MODIFY] [style.css](file:///c:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T01%20V1/style.css)
-- Define `.settings-preview-container`:
-  - `position: relative; width: 100%; height: 180px; border-radius: 8px; border: 1px solid rgba(230, 126, 34, 0.4); background: rgba(0, 0, 0, 0.4); overflow: hidden; margin-bottom: 12px;`
-- Define `.settings-preview-canvas`:
-  - `width: 100%; height: 100%; display: block;`
-- Define `.preview-angle-hud`:
-  - `position: absolute; top: 6px; left: 8px; font-size: 10px; font-family: monospace; color: #f39c12; background: rgba(0, 0, 0, 0.6); padding: 2px 6px; border-radius: 4px; pointer-events: none;`
-- Define `.preview-hud-controls`:
-  - `position: absolute; bottom: 6px; right: 8px; display: flex; gap: 4px; z-index: 10;`
-
----
-
-### 3. Dual-Viewport WebGL Rendering & Spotlight Visualizer Engine
-
-#### [MODIFY] [renderer.js](file:///c:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T01%20V1/renderer.js)
-- **Preview Engine Initialization**:
-  - Instantiate `previewRenderer`, `previewCamera` (`THREE.PerspectiveCamera(45, width/height, 0.1, 100)`), and `previewControls` (OrbitControls for preview canvas).
-- **Synchronized Render Loop**:
-  - In `animate()`, check if `isSettingsOpen` is true and `#settings-preview-container` is visible.
-  - Execute `previewRenderer.render(scene, previewCamera)`.
-- **Spotlight Polar Coordinate Visualizer**:
-  - Update spotlight light positions and helper frustums in real time based on angles:
-    $$\text{radH} = \text{angleH} \times \frac{\pi}{180}, \quad \text{radV} = \text{angleV} \times \frac{\pi}{180}$$
-    $$X = R \cdot \cos(\text{radV}) \cdot \cos(\text{radH})$$
-    $$Y = R \cdot \sin(\text{radV})$$
-    $$Z = R \cdot \cos(\text{radV}) \cdot \sin(\text{radH})$$
-- **Live Angle HUD Badge Updater**:
-  - `updatePreviewHUD()` formats active spotlight horizontal angle, vertical angle, and cone spread into formatted HUD overlay text.
-
----
-
-### 4. Locale Dictionary Key Parity Across 31 Languages
-
-#### [MODIFY] [scratch_create_locales.js](file:///c:/Users/space/.gemini/antigravity-ide/scratch/Desktop-3D-Display-T01%20V1/scratch_create_locales.js)
-- Add preview viewport localization keys to the master English dictionary (`newTranslations["en"]`):
-  - `preview_title`: "3D Asset & Lighting Viewport"
-  - `preview_reset_cam`: "Reset Preview Camera"
-  - `toggle_helpers`: "Toggle Spotlight Rays & Frustums"
-  - `cam_front`: "Front"
-  - `cam_top`: "Top"
-  - `cam_iso`: "Isometric"
-  - `spotlight_hud`: "Light #{{id}}: H:{{h}}° V:{{v}}° Cone:{{cone}}°"
-- Run automated locale generator `node scratch_create_locales.js` to propagate all preview keys to all 31 supported locale files under `locales/`.
-
----
-
-## Verification & Quality Plan
-
-### Automated Verification
-1. Run `node scratch_create_locales.js` to ensure all 31 `translation.json` files contain the new preview viewport keys with 100% key parity.
-2. Verify JS build syntax with `npx eslint` or node execution checks.
+## 🧪 Verification Plan
 
 ### Manual Verification
-1. Launch application via `npm start` or standalone executable.
-2. Open Settings Panel ➔ Navigate to **Lighting Tab**.
-3. Confirm 3D Asset Preview Viewport renders the active 3D mascot model smoothly inside the Settings Panel.
-4. Drag horizontal angle slider (`angleH`), vertical angle slider (`angleV`), and cone slider (`cone`).
-5. Confirm spotlight light beam frustums, position vectors, and shading on the 3D mascot adjust live in real-time in the preview canvas.
-6. Click camera view preset buttons (Front, Top, Isometric) and verify preview camera repositions cleanly.
-7. Switch system language to German, Japanese, Spanish, Simplified Chinese, Arabic, Korean, etc., and verify all viewport labels and HUD badges re-translate seamlessly.
+1. Run `npm start` to launch the application.
+2. Hold **`Ctrl`** key and **Left-Click + Drag** the mouse around the mascot in a circular motion.
+3. Verify that the 3D mascot model spins smoothly around its Z-axis (roll tilt) following the circular cursor path.
+4. Open Settings Panel ➔ Motion Tab and confirm the Z-rotation slider updates smoothly in real time during the drag.
+5. Verify that `Alt + Drag` still performs standard X/Y Orbit rotation and `Shift + Drag` performs X/Y Pan movement.

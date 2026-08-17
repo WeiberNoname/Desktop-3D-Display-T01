@@ -61,8 +61,9 @@ export async function initializeApp(deps) {
   camera.position.set(0, 0, 5.5);
   state.camera = camera;
 
-  // 3. Create Renderer with full transparency
-  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  // 3. Create Renderer with full transparency and dynamic GPU power preference
+  const powerPref = currentSettings && currentSettings.gpuLowPower ? 'low-power' : ((currentSettings && currentSettings.gpuOptimize) ? 'high-performance' : 'default');
+  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: powerPref });
   renderer.setSize(initialWidth, initialHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setClearColor(0x000000, 0);

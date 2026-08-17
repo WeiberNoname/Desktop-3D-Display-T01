@@ -106,6 +106,12 @@ canvas {
   opacity: 1;
   transform: scale(1);
   font-size: calc(12.5px * var(--panel-font-scale, 1.0));
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.settings-panel.resizing {
+  border-color: rgba(230, 126, 34, 0.85) !important;
+  box-shadow: 0 0 16px rgba(230, 126, 34, 0.4), 0 12px 40px rgba(0, 0, 0, 0.85) !important;
 }
 
 /* Draggable Settings Title Header Bar */

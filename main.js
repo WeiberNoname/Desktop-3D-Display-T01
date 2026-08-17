@@ -105,7 +105,7 @@ function createWindow() {
   });
 }
 
-function shouldOptimizeGPU() {
+function getGPUPowerPreference() {
   const assetsDir = getAssetsPath();
   const settingsFile = path.join(assetsDir, 'settings');
   const settingsTxtFile = path.join(assetsDir, 'settings.txt');
@@ -113,36 +113,50 @@ function shouldOptimizeGPU() {
   if (fs.existsSync(settingsFile)) filePath = settingsFile;
   else if (fs.existsSync(settingsTxtFile)) filePath = settingsTxtFile;
   
+  let mode = 'high-performance';
   if (filePath && fs.existsSync(filePath)) {
     try {
       const data = fs.readFileSync(filePath, 'utf8');
       const lines = data.split('\n');
-      let optimize = true; // Default to true if not specified
       lines.forEach(line => {
         const parts = line.split('=');
-        if (parts.length === 2 && parts[0].trim() === 'gpuOptimize') {
-          optimize = (parts[1].trim() !== 'false');
+        if (parts.length === 2) {
+          const key = parts[0].trim();
+          const val = parts[1].trim();
+          if (key === 'gpuLowPower' && val === 'true') {
+            mode = 'low-power';
+          } else if (key === 'gpuOptimize' && val === 'false' && mode !== 'low-power') {
+            mode = 'default';
+          }
         }
       });
-      return optimize;
     } catch (e) {
       console.error('Error reading settings in main:', e);
     }
   }
-  return true; // Default to true if file missing
+  return mode;
 }
 
 // Disable GPU occlusion tracking to prevent chromium from suspending rendering
 // when window overlaps with other apps
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows', 'true');
 
-// Conditionally append GPU optimizations based on user preference config
-if (shouldOptimizeGPU()) {
-  // Force Electron to request the high-performance dedicated GPU (discrete graphics)
-  app.commandLine.appendSwitch('force-high-performance-gpu', 'true');
+// Dynamically configure Chromium hardware switches based on dual-GPU preference
+const gpuPowerMode = getGPUPowerPreference();
+if (gpuPowerMode === 'high-performance') {
+  // Force NVIDIA Optimus & AMD Enduro driver shims at process environment level
+  process.env['SHIM_MCCOMPAT'] = '0x00000001';
+  process.env['__NV_PRIME_RENDER_OFFLOAD'] = '1';
+  process.env['__GLX_VENDOR_LIBRARY_NAME'] = 'nvidia';
 
-  // Bypass Chromium driver blocklists to ensure hardware acceleration is active
+  app.commandLine.appendSwitch('force_high_performance_gpu');
+  app.commandLine.appendSwitch('force-high-performance-gpu', 'true');
   app.commandLine.appendSwitch('ignore-gpu-blocklist', 'true');
+  app.commandLine.appendSwitch('enable-gpu-rasterization', 'true');
+  app.commandLine.appendSwitch('use-angle', 'd3d11');
+} else if (gpuPowerMode === 'low-power') {
+  app.commandLine.appendSwitch('prefer-low-power-gpu', 'true');
+  app.commandLine.appendSwitch('use-angle', 'd3d11');
 }
 
 // Disable automatic DPI scaling to prevent window enlarging/shrinking when dragging across monitors

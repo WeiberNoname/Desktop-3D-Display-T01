@@ -77,6 +77,12 @@ export async function handleSaveSettings(deps) {
   currentSettings.speedZ = parseFloat(speedZSlider.value);
 
   currentSettings.gpuOptimize = gpuOptimizeCheck.checked;
+  const gpuLowPowerDom = deps.gpuLowPowerCheck || document.getElementById('gpu-low-power');
+  const idleFpsSaverDom = deps.idleFpsSaverCheck || document.getElementById('idle-fps-saver');
+  const dynamicBatterySaverDom = deps.dynamicBatterySaverCheck || document.getElementById('dynamic-battery-saver');
+  if (gpuLowPowerDom) currentSettings.gpuLowPower = gpuLowPowerDom.checked;
+  if (idleFpsSaverDom) currentSettings.idleFpsSaver = idleFpsSaverDom.checked;
+  if (dynamicBatterySaverDom) currentSettings.dynamicBatterySaver = dynamicBatterySaverDom.checked;
   currentSettings.mouseOptimize = mouseOptimizeCheck.checked;
   currentSettings.settingsLeft = settingsLeftCheck.checked;
   currentSettings.lockPosition = lockPositionCheck.checked;

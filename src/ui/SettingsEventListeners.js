@@ -5,6 +5,7 @@
  */
 
 import { setupDiagnosticsUI } from './SettingsDiagnosticsUI.js';
+import { setupSettingsPanelResize } from './SettingsPanelResizeHandler.js';
 
 export function setupSettingsUI(deps) {
   const {
@@ -133,10 +134,25 @@ export function setupSettingsUI(deps) {
     });
   }
 
+  const detectEdge = setupSettingsPanelResize({
+    panel,
+    currentSettings,
+    ipcRenderer,
+    saveSettingsFile,
+    widthSlider,
+    heightSlider,
+    valWidth,
+    valHeight,
+    camera: deps.camera,
+    renderer: deps.renderer,
+    state
+  });
+
   const settingsHeader = document.getElementById('settings-header');
   if (settingsHeader) {
     settingsHeader.addEventListener('mousedown', (e) => {
-      if (e.button !== 0 || currentSettings.lockPosition) return;
+      if (e.button !== 0 || currentSettings.lockPosition || (state && state.isResizingPanel)) return;
+      if (detectEdge && detectEdge(e)) return;
       state.isDragging = true;
       state.dragStartScreenX = e.screenX;
       state.dragStartScreenY = e.screenY;

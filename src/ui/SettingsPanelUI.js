@@ -49,6 +49,8 @@ export function syncSlidersUI(deps) {
     speedYSlider,
     speedZSlider,
     gpuOptimizeCheck,
+    gpuLowPowerCheck,
+    idleFpsSaverCheck,
     mouseOptimizeCheck,
     settingsLeftCheck,
     lockPositionCheck,
@@ -94,6 +96,12 @@ export function syncSlidersUI(deps) {
   if (speedZSlider) speedZSlider.value = currentSettings.speedZ;
 
   if (gpuOptimizeCheck) gpuOptimizeCheck.checked = currentSettings.gpuOptimize;
+  const gpuLowPowerDom = gpuLowPowerCheck || document.getElementById('gpu-low-power');
+  const idleFpsSaverDom = idleFpsSaverCheck || document.getElementById('idle-fps-saver');
+  const dynamicBatterySaverDom = deps.dynamicBatterySaverCheck || document.getElementById('dynamic-battery-saver');
+  if (gpuLowPowerDom) gpuLowPowerDom.checked = !!currentSettings.gpuLowPower;
+  if (idleFpsSaverDom) idleFpsSaverDom.checked = !!currentSettings.idleFpsSaver;
+  if (dynamicBatterySaverDom) dynamicBatterySaverDom.checked = currentSettings.dynamicBatterySaver !== false;
   if (mouseOptimizeCheck) mouseOptimizeCheck.checked = currentSettings.mouseOptimize;
   if (settingsLeftCheck) settingsLeftCheck.checked = currentSettings.settingsLeft;
   if (lockPositionCheck) lockPositionCheck.checked = currentSettings.lockPosition;
