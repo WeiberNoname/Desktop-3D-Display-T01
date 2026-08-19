@@ -16,6 +16,7 @@ export function createRenderLoopDelegates(deps) {
 
   let idleDeltaAccumulator = 0;
   let batteryDeltaAccumulator = 0;
+  let fpsTargetDeltaAccumulator = 0;
 
   const animate = () => {
     requestAnimationFrame(animate);
@@ -65,6 +66,19 @@ export function createRenderLoopDelegates(deps) {
     } else {
       idleDeltaAccumulator = 0;
       batteryDeltaAccumulator = 0;
+    }
+
+    // Target FPS Speed Limiter (from Motion & Spin settings)
+    const targetFps = parseInt(currentSettings.targetFps, 10) || 60;
+    if (targetFps > 0 && targetFps < 240) {
+      const targetInterval = 1.0 / targetFps;
+      fpsTargetDeltaAccumulator += delta;
+      if (fpsTargetDeltaAccumulator < targetInterval - 0.001) {
+        return; // Skip rendering frame to cap at user configured target FPS
+      }
+      fpsTargetDeltaAccumulator %= targetInterval;
+    } else {
+      fpsTargetDeltaAccumulator = 0;
     }
 
     updateAnimationFrameUtil({

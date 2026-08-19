@@ -9,10 +9,12 @@ console.log('▶ Testing SettingsManager defaults & fallback merging...');
 const defaults = SettingsManager.getDefaultSettings();
 assert.strictEqual(defaults.width, 350, 'Default width should be 350');
 assert.strictEqual(defaults.height, 350, 'Default height should be 350');
+assert.strictEqual(defaults.targetFps, 60, 'Default targetFps should be 60');
 assert.strictEqual(defaults.language, 'en', 'Default language should be en');
 
-const merged = SettingsManager.mergeWithDefaults({ scale: 2.5, customKey: 'test' });
+const merged = SettingsManager.mergeWithDefaults({ scale: 2.5, targetFps: 120, customKey: 'test' });
 assert.strictEqual(merged.scale, 2.5, 'Scale should be overridden to 2.5');
+assert.strictEqual(merged.targetFps, 120, 'targetFps should be overridden to 120');
 assert.strictEqual(merged.width, 350, 'Unspecified width should fallback to 350');
 console.log('✅ SettingsManager tests PASSED.');
 

@@ -90,6 +90,16 @@
 
       <!-- Tab 2: Motion & Spin -->
       <div id="tab-motion" class="studio-tab-content">
+        <div class="setting-item">
+          <label for="target-fps"><span data-i18n="target_fps">Target FPS Speed</span>: <span
+              id="val-target-fps">60</span> FPS</label>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <input type="range" id="target-fps" min="15" max="240" step="1" value="60" style="flex: 1;">
+            <input type="number" id="num-target-fps" min="15" max="240" step="1" value="60"
+              style="width: 58px; padding: 3px 6px; background: #181818; border: 1px solid #3a3a3a; color: #fff; border-radius: 4px; font-size: 12px; text-align: center;">
+          </div>
+        </div>
+
         <div class="setting-item checkbox">
           <input type="checkbox" id="model-bobbing" checked>
           <label for="model-bobbing" data-i18n="idle_bobbing">Enable Idle Bobbing</label>

@@ -16,6 +16,8 @@ export function gatherSettingsFormElements() {
     speedXSlider: document.getElementById('speed-x'),
     speedYSlider: document.getElementById('speed-y'),
     speedZSlider: document.getElementById('speed-z'),
+    targetFpsSlider: document.getElementById('target-fps'),
+    numTargetFps: document.getElementById('num-target-fps'),
     gpuOptimizeCheck: document.getElementById('gpu-optimize'),
     gpuLowPowerCheck: document.getElementById('gpu-low-power'),
     idleFpsSaverCheck: document.getElementById('idle-fps-saver'),

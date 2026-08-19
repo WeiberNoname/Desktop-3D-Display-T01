@@ -76,6 +76,13 @@ export async function handleSaveSettings(deps) {
   currentSettings.speedY = parseFloat(speedYSlider.value);
   currentSettings.speedZ = parseFloat(speedZSlider.value);
 
+  const targetFpsSliderDom = deps.targetFpsSlider || document.getElementById('target-fps');
+  const numTargetFpsDom = deps.numTargetFps || document.getElementById('num-target-fps');
+  if (targetFpsSliderDom || numTargetFpsDom) {
+    const fpsVal = parseInt(targetFpsSliderDom ? targetFpsSliderDom.value : numTargetFpsDom.value, 10) || 60;
+    currentSettings.targetFps = Math.max(15, Math.min(240, fpsVal));
+  }
+
   currentSettings.gpuOptimize = gpuOptimizeCheck.checked;
   const gpuLowPowerDom = deps.gpuLowPowerCheck || document.getElementById('gpu-low-power');
   const idleFpsSaverDom = deps.idleFpsSaverCheck || document.getElementById('idle-fps-saver');

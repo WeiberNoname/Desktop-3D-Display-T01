@@ -48,6 +48,8 @@ export function syncSlidersUI(deps) {
     speedXSlider,
     speedYSlider,
     speedZSlider,
+    targetFpsSlider,
+    numTargetFps,
     gpuOptimizeCheck,
     gpuLowPowerCheck,
     idleFpsSaverCheck,
@@ -66,6 +68,7 @@ export function syncSlidersUI(deps) {
     valSpeedX,
     valSpeedY,
     valSpeedZ,
+    valTargetFps,
     valPhysicsGravity,
     valPhysicsElasticity,
     fontScaleSlider,
@@ -94,6 +97,11 @@ export function syncSlidersUI(deps) {
   if (speedXSlider) speedXSlider.value = currentSettings.speedX;
   if (speedYSlider) speedYSlider.value = currentSettings.speedY;
   if (speedZSlider) speedZSlider.value = currentSettings.speedZ;
+
+  const targetFpsVal = currentSettings.targetFps || 60;
+  if (targetFpsSlider) targetFpsSlider.value = targetFpsVal;
+  if (numTargetFps) numTargetFps.value = targetFpsVal;
+  if (valTargetFps) valTargetFps.innerText = targetFpsVal;
 
   if (gpuOptimizeCheck) gpuOptimizeCheck.checked = currentSettings.gpuOptimize;
   const gpuLowPowerDom = gpuLowPowerCheck || document.getElementById('gpu-low-power');
