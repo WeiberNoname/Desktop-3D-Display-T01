@@ -42,6 +42,9 @@ export function setupSettingsUI(deps) {
   const speedXSlider = document.getElementById('speed-x');
   const speedYSlider = document.getElementById('speed-y');
   const speedZSlider = document.getElementById('speed-z');
+  const targetFpsSlider = document.getElementById('target-fps');
+  const numTargetFps = document.getElementById('num-target-fps');
+  const valTargetFps = document.getElementById('val-target-fps');
 
   const gpuOptimizeCheck = document.getElementById('gpu-optimize');
   const mouseOptimizeCheck = document.getElementById('mouse-optimize');
@@ -190,6 +193,26 @@ export function setupSettingsUI(deps) {
   bindSliderInput(speedZSlider, valSpeedZ, (v) => parseFloat(v).toFixed(1));
   bindSliderInput(physicsGravitySlider, valPhysicsGravity, (v) => parseFloat(v).toFixed(1));
   bindSliderInput(physicsElasticitySlider, valPhysicsElasticity, (v) => parseFloat(v).toFixed(2));
+
+  if (targetFpsSlider) {
+    targetFpsSlider.addEventListener('input', () => {
+      const val = parseInt(targetFpsSlider.value, 10);
+      if (valTargetFps) valTargetFps.innerText = val;
+      if (numTargetFps) numTargetFps.value = val;
+      currentSettings.targetFps = val;
+    });
+  }
+
+  if (numTargetFps) {
+    numTargetFps.addEventListener('input', () => {
+      let val = parseInt(numTargetFps.value, 10);
+      if (isNaN(val)) return;
+      val = Math.max(15, Math.min(240, val));
+      if (valTargetFps) valTargetFps.innerText = val;
+      if (targetFpsSlider) targetFpsSlider.value = val;
+      currentSettings.targetFps = val;
+    });
+  }
 
   if (enableStudioLightsCheck) {
     enableStudioLightsCheck.addEventListener('change', () => {

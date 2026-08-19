@@ -27,6 +27,7 @@ export function createFormSyncManager(deps) {
     const valSpeedX = document.getElementById('val-speed-x');
     const valSpeedY = document.getElementById('val-speed-y');
     const valSpeedZ = document.getElementById('val-speed-z');
+    const valTargetFps = document.getElementById('val-target-fps');
     const valPhysicsGravity = document.getElementById('val-physics-gravity');
     const valPhysicsElasticity = document.getElementById('val-physics-elasticity');
     const valFontScale = document.getElementById('val-font-scale');
@@ -42,6 +43,7 @@ export function createFormSyncManager(deps) {
       valSpeedX,
       valSpeedY,
       valSpeedZ,
+      valTargetFps,
       valPhysicsGravity,
       valPhysicsElasticity,
       valFontScale,

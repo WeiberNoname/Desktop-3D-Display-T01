@@ -35,6 +35,7 @@ export class SettingsManager {
       activeAnimation: 'default',
       clickCount: 0,
       fontSizeScale: 1.0,
+      targetFps: 60,
       language: 'en'
     };
   }
@@ -79,6 +80,7 @@ activeModel=procedural
 activeAnimation=default
 clickCount=0
 fontSizeScale=1.0
+targetFps=60
 language=en`;
 
     if (!filePath) {
@@ -160,6 +162,7 @@ language=en`;
             if (key === 'activeAnimation') { currentSettings.activeAnimation = val || 'default'; validKeysParsed++; }
             if (key === 'clickCount') { currentSettings.clickCount = parseInt(val, 10) || 0; validKeysParsed++; }
             if (key === 'fontSizeScale') { currentSettings.fontSizeScale = parseFloat(val) || 1.0; validKeysParsed++; }
+            if (key === 'targetFps') { currentSettings.targetFps = parseInt(val, 10) || 60; validKeysParsed++; }
             if (key === 'language') { currentSettings.language = val || 'en'; validKeysParsed++; }
           }
         });
@@ -232,6 +235,7 @@ activeModel=${currentSettings.activeModel}
 activeAnimation=${currentSettings.activeAnimation}
 clickCount=${currentSettings.clickCount}
 fontSizeScale=${currentSettings.fontSizeScale}
+targetFps=${currentSettings.targetFps || 60}
 language=${currentSettings.language}`;
 
     try {
